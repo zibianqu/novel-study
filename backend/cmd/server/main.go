@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/zibianqu/novel-study/internal/ai"
 	"github.com/zibianqu/novel-study/internal/config"
 	"github.com/zibianqu/novel-study/internal/handler"
 	"github.com/zibianqu/novel-study/internal/middleware"
@@ -38,18 +39,25 @@ func main() {
 	defer neo4jDriver.Close()
 	log.Println("✅ Neo4j 连接成功")
 
+	// 初始化 AI 引擎
+	aiEngine := ai.NewEngine(cfg)
+	log.Printf("✅ AI 引擎初始化完成，已注册 %d 个 Agent", len(aiEngine.ListAgents()))
+
 	// 初始化 Repository
 	projectRepo := repository.NewProjectRepository(db)
 	chapterRepo := repository.NewChapterRepository(db)
+	agentRepo := repository.NewAgentRepository(db)
 
 	// 初始化 Service
 	projectService := service.NewProjectService(projectRepo)
 	chapterService := service.NewChapterService(chapterRepo, projectRepo)
+	aiService := service.NewAIService(aiEngine, agentRepo, projectRepo)
 
 	// 初始化 Handler
 	authHandler := handler.NewAuthHandler(db, cfg)
 	projectHandler := handler.NewProjectHandler(projectService)
 	chapterHandler := handler.NewChapterHandler(chapterService)
+	aiHandler := handler.NewAIHandler(aiService)
 
 	// 初始化 Gin
 	if cfg.Environment == "production" {
@@ -105,6 +113,13 @@ func main() {
 			protected.DELETE("/chapters/:id", chapterHandler.DeleteChapter)
 			protected.POST("/chapters/:id/lock", chapterHandler.LockChapter)
 			protected.POST("/chapters/:id/unlock", chapterHandler.UnlockChapter)
+
+			// AI 功能
+			protected.GET("/ai/agents", aiHandler.GetAgents)
+			protected.POST("/ai/chat", aiHandler.Chat)
+			protected.POST("/ai/chat/stream", middleware.SSE(), aiHandler.ChatStream)
+			protected.POST("/ai/generate/chapter", aiHandler.GenerateChapter)
+			protected.POST("/ai/check/quality", aiHandler.CheckQuality)
 		}
 	}
 
@@ -113,8 +128,15 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("🚀 服务器启动在端口 %s", port)
-	log.Println("📚 API 文档: http://localhost:" + port + "/api/v1")
+	log.Println("")
+	log.Println("✨ ========================================")
+	log.Printf("🚀 NovelForge AI 服务器启动成功")
+	log.Printf("🎬 7 个核心 Agent 已就绪")
+	log.Printf("🔗 前端: http://localhost:%s", port)
+	log.Printf("📚 API: http://localhost:%s/api/v1", port)
+	log.Println("✨ ========================================")
+	log.Println("")
+
 	if err := router.Run(":" + port); err != nil {
 		log.Fatalf("服务器启动失败: %v", err)
 	}

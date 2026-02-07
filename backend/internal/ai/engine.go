@@ -32,19 +32,29 @@ func NewEngine(cfg *config.Config) *Engine {
 
 // RegisterCoreAgents 注册核心Agent
 func (e *Engine) RegisterCoreAgents() {
+	// 需要导入 agents 包
+	import "github.com/zibianqu/novel-study/internal/ai/agents"
+
 	// Agent 0: 总导演
-	e.RegisterAgent("agent_0_director", NewDirectorAgent(e.apiKey))
+	e.RegisterAgent("agent_0_director", agents.NewDirectorAgent(e.apiKey))
 
 	// Agent 1: 旁白叙述者
-	e.RegisterAgent("agent_1_narrator", NewNarratorAgent(e.apiKey))
+	e.RegisterAgent("agent_1_narrator", agents.NewNarratorAgent(e.apiKey))
 
 	// Agent 2: 角色扉演者
-	e.RegisterAgent("agent_2_character", NewCharacterAgent(e.apiKey))
+	e.RegisterAgent("agent_2_character", agents.NewCharacterAgent(e.apiKey))
 
 	// Agent 3: 审核导演
-	e.RegisterAgent("agent_3_quality", NewQualityAgent(e.apiKey))
+	e.RegisterAgent("agent_3_quality", agents.NewQualityAgent(e.apiKey))
 
-	// TODO: Agent 4-6 在后续实现
+	// Agent 4: 天线掌控者
+	e.RegisterAgent("agent_4_skyline", agents.NewSkylineAgent(e.apiKey))
+
+	// Agent 5: 地线掌控者
+	e.RegisterAgent("agent_5_groundline", agents.NewGroundlineAgent(e.apiKey))
+
+	// Agent 6: 剧情线掌控者
+	e.RegisterAgent("agent_6_plotline", agents.NewPlotlineAgent(e.apiKey))
 }
 
 // RegisterAgent 注册Agent
@@ -86,6 +96,15 @@ func (e *Engine) ExecuteAgentStream(ctx context.Context, agentKey string, req *A
 	}
 
 	return agent.ExecuteStream(ctx, req, callback)
+}
+
+// ListAgents 获取所有Agent列表
+func (e *Engine) ListAgents() []string {
+	keys := make([]string, 0, len(e.agents))
+	for key := range e.agents {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 // ChatCompletion 通用聊天完成

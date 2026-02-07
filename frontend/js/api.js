@@ -26,15 +26,24 @@ const API = {
                 headers
             });
 
+            // 检查 HTTP 状态码
             if (response.status === 401) {
                 // Token 过期，跳转登录
                 localStorage.removeItem(STORAGE_KEYS.TOKEN);
                 localStorage.removeItem(STORAGE_KEYS.USER_INFO);
                 location.href = 'index.html';
-                return;
+                throw new Error('Unauthorized');
             }
 
-            return await response.json();
+            // 解析 JSON
+            const data = await response.json();
+
+            // 检查是否有错误
+            if (!response.ok) {
+                throw { status: response.status, error: data.error || 'Request failed', data };
+            }
+
+            return data;
         } catch (error) {
             console.error('API Error:', error);
             throw error;
@@ -87,8 +96,25 @@ const API = {
 
     // AI API
     ai: {
+        agents: () => API.get('/ai/agents'),
         chat: (data) => API.post('/ai/chat', data),
         generateChapter: (data) => API.post('/ai/generate/chapter', data),
         checkQuality: (data) => API.post('/ai/check/quality', data)
+    },
+
+    // 知识库 API
+    knowledge: {
+        list: (projectId) => API.get(`/knowledge/project/${projectId}`),
+        get: (id) => API.get(`/knowledge/${id}`),
+        create: (data) => API.post('/knowledge', data),
+        delete: (id) => API.delete(`/knowledge/${id}`),
+        search: (data) => API.post('/knowledge/search', data)
+    },
+
+    // 图谱 API
+    graph: {
+        get: (projectId) => API.get(`/graph/project/${projectId}`),
+        createNode: (data) => API.post('/graph/node', data),
+        createRelation: (data) => API.post('/graph/relation', data)
     }
 };

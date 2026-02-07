@@ -3,11 +3,23 @@ let editor = null;
 let currentProjectId = null;
 let currentChapterId = null;
 let autoSaveTimer = null;
+let isSaving = false;
+let editorReady = false;
 
 // 获取URL参数
 function getQueryParam(name) {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get(name);
+}
+
+// 更新URL参数
+function updateURL(projectId, chapterId) {
+    const url = new URL(window.location);
+    url.searchParams.set('project', projectId);
+    if (chapterId) {
+        url.searchParams.set('chapter', chapterId);
+    }
+    window.history.replaceState({}, '', url);
 }
 
 // 初始化
@@ -27,10 +39,10 @@ layui.use(['layer', 'element'], function() {
         document.getElementById('username').textContent = userInfo.username;
     }
 
-    // 获取项目ID
+    // 获取项目 ID
     currentProjectId = parseInt(getQueryParam('project'));
     if (!currentProjectId) {
-        layer.msg('缺少项目ID', { icon: 2 });
+        layer.msg('缺少项目 ID', { icon: 2 });
         setTimeout(() => location.href = 'project.html', 1500);
         return;
     }
@@ -48,6 +60,8 @@ layui.use(['layer', 'element'], function() {
 
 // 初始化 Monaco Editor
 function initMonacoEditor() {
+    const loadingIndex = layui.layer.msg('加载编辑器...', { icon: 16, time: 0 });
+
     require.config({ 
         paths: { 
             'vs': 'https://cdn.staticfile.org/monaco-editor/0.44.0/min/vs' 
@@ -56,6 +70,8 @@ function initMonacoEditor() {
     });
 
     require(['vs/editor/editor.main'], function() {
+        layui.layer.close(loadingIndex);
+
         editor = monaco.editor.create(document.getElementById('editor'), {
             value: '',
             language: 'plaintext',
@@ -71,6 +87,8 @@ function initMonacoEditor() {
             cursorBlinking: 'smooth'
         });
 
+        editorReady = true;
+
         // 监听内容变化
         editor.onDidChangeModelContent(() => {
             updateWordCount();
@@ -78,10 +96,12 @@ function initMonacoEditor() {
             resetAutoSave();
         });
 
-        // 快捷键
+        // 快捷键 Ctrl+S
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
             saveChapter();
         });
+
+        console.log('Editor initialized');
     });
 }
 
@@ -107,7 +127,7 @@ async function loadChapters() {
 
         // 自动加载第一章或URL指定的章节
         const chapterId = getQueryParam('chapter');
-        if (chapterId) {
+        if (chapterId && chapters.some(ch => ch.id === parseInt(chapterId))) {
             loadChapter(parseInt(chapterId));
         } else if (chapters.length > 0) {
             loadChapter(chapters[0].id);
@@ -151,7 +171,10 @@ function updateProjectStats(chapters) {
 
 // 加载章节内容
 async function loadChapter(chapterId) {
-    if (!editor) return;
+    if (!editorReady) {
+        layui.layer.msg('编辑器未就绪，请稍后', { icon: 2 });
+        return;
+    }
 
     try {
         // 保存当前章节
@@ -162,11 +185,14 @@ async function loadChapter(chapterId) {
         const chapter = await API.chapters.get(chapterId);
         currentChapterId = chapterId;
 
+        // 更新 URL
+        updateURL(currentProjectId, chapterId);
+
         // 更新编辑器
         editor.setValue(chapter.content || '');
         document.getElementById('chapterTitle').value = chapter.title || '';
         
-        // 更新UI
+        // 更新 UI
         updateWordCount();
         markSaved();
         highlightCurrentChapter(chapterId);
@@ -178,14 +204,17 @@ async function loadChapter(chapterId) {
 
 // 保存章节
 async function saveChapter(silent = false) {
-    if (!currentChapterId || !editor) return;
+    if (!currentChapterId || !editorReady || isSaving) return;
 
-    const title = document.getElementById('chapterTitle').value;
+    const title = document.getElementById('chapterTitle').value.trim();
     const content = editor.getValue();
+
+    // 防止并发保存
+    isSaving = true;
 
     try {
         await API.chapters.update(currentChapterId, {
-            title: title,
+            title: title || '未命名章节',
             content: content
         });
 
@@ -195,28 +224,38 @@ async function saveChapter(silent = false) {
         }
         loadChapters(); // 刷新列表
     } catch (error) {
-        layui.layer.msg('保存失败', { icon: 2 });
-        console.error(error);
+        markUnsaved();
+        if (!silent) {
+            layui.layer.msg('保存失败: ' + (error.error || '网络错误'), { icon: 2 });
+        }
+        console.error('Save error:', error);
+    } finally {
+        isSaving = false;
     }
 }
 
 // 新建章节
 function addChapter() {
-    layui.layer.prompt({ title: '请输入章节标题' }, async function(value, index) {
+    layui.layer.prompt({ title: '请输入章节标题', formType: 0 }, async function(value, index) {
+        if (!value || !value.trim()) {
+            layui.layer.msg('章节标题不能为空', { icon: 2 });
+            return;
+        }
+
         try {
             const chapter = await API.chapters.create({
                 project_id: currentProjectId,
-                title: value,
+                title: value.trim(),
                 content: '',
                 sort_order: 0
             });
 
             layui.layer.close(index);
             layui.layer.msg('创建成功', { icon: 1 });
-            loadChapters();
+            await loadChapters();
             loadChapter(chapter.id);
         } catch (error) {
-            layui.layer.msg('创建失败', { icon: 2 });
+            layui.layer.msg('创建失败: ' + (error.error || '网络错误'), { icon: 2 });
             console.error(error);
         }
     });
@@ -226,20 +265,22 @@ function addChapter() {
 function deleteChapter(chapterId, event) {
     event.stopPropagation();
     
-    layui.layer.confirm('确定要删除这一章吗？', { icon: 3 }, async function() {
+    layui.layer.confirm('确定要删除这一章吗？', { icon: 3 }, async function(index) {
         try {
             await API.chapters.delete(chapterId);
+            layui.layer.close(index);
             layui.layer.msg('删除成功', { icon: 1 });
             
             if (currentChapterId === chapterId) {
                 currentChapterId = null;
                 editor.setValue('');
                 document.getElementById('chapterTitle').value = '';
+                updateURL(currentProjectId, null);
             }
             
             loadChapters();
         } catch (error) {
-            layui.layer.msg('删除失败', { icon: 2 });
+            layui.layer.msg('删除失败: ' + (error.error || '网络错误'), { icon: 2 });
             console.error(error);
         }
     });
@@ -249,22 +290,28 @@ function deleteChapter(chapterId, event) {
 function updateWordCount() {
     if (!editor) return;
     const content = editor.getValue();
-    const count = content.length;
+    const count = content.replace(/\s/g, '').length; // 不计空格
     document.getElementById('currentWordCount').textContent = count.toLocaleString();
 }
 
 // 标记未保存
 function markUnsaved() {
     const status = document.getElementById('editorStatus');
-    status.textContent = '未保存';
-    status.classList.remove('saved');
+    if (status) {
+        status.textContent = '未保存';
+        status.classList.remove('saved');
+        status.style.color = '#ff5722';
+    }
 }
 
 // 标记已保存
 function markSaved() {
     const status = document.getElementById('editorStatus');
-    status.textContent = '已保存';
-    status.classList.add('saved');
+    if (status) {
+        status.textContent = '已保存';
+        status.classList.add('saved');
+        status.style.color = '#5fb878';
+    }
 }
 
 // 高亮当前章节
@@ -283,20 +330,43 @@ function resetAutoSave() {
         clearTimeout(autoSaveTimer);
     }
     autoSaveTimer = setTimeout(() => {
-        saveChapter(true);
+        if (!isSaving) {
+            saveChapter(true);
+        }
     }, 30000); // 30秒自动保存
 }
 
 // 绑定事件
 function bindEvents() {
-    document.getElementById('saveBtn').addEventListener('click', () => saveChapter());
-    document.getElementById('addChapterBtn').addEventListener('click', addChapter);
-    document.getElementById('aiAssistBtn').addEventListener('click', toggleAIChat);
+    // 保存按钮
+    const saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => saveChapter());
+    }
+
+    // 新建章节按钮
+    const addBtn = document.getElementById('addChapterBtn');
+    if (addBtn) {
+        addBtn.addEventListener('click', addChapter);
+    }
+
+    // AI助手按钮
+    const aiBtn = document.getElementById('aiAssistBtn');
+    if (aiBtn) {
+        aiBtn.addEventListener('click', toggleAIChat);
+    }
 
     // 页面关闭前保存
     window.addEventListener('beforeunload', (e) => {
-        if (currentChapterId) {
-            saveChapter(true);
+        const status = document.getElementById('editorStatus');
+        if (status && status.textContent === '未保存') {
+            e.preventDefault();
+            e.returnValue = '您有未保存的内容，确定要离开吗？';
+            
+            // 尝试保存
+            if (currentChapterId && editorReady) {
+                saveChapter(true);
+            }
         }
     });
 }
@@ -304,5 +374,7 @@ function bindEvents() {
 // 切换AI对话
 function toggleAIChat() {
     const panel = document.getElementById('aiChatPanel');
-    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    if (panel) {
+        panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    }
 }

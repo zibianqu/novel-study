@@ -1,179 +1,114 @@
 package openai
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
+
+	"github.com/sashabaranov/go-openai"
+	"github.com/zibianqu/novel-study/internal/ai"
 )
 
-const (
-	BaseURL           = "https://api.openai.com/v1"
-	DefaultModel      = "gpt-4o"
-	DefaultEmbedModel = "text-embedding-3-small"
-)
-
-// Client OpenAI 客户端
+// Client OpenAI 客户端封装
 type Client struct {
-	apiKey     string
-	baseURL    string
-	httpClient *http.Client
+	client *openai.Client
 }
 
-// NewClient 创建客户端
+// NewClient 创建 OpenAI 客户端
 func NewClient(apiKey string) *Client {
+	if apiKey == "" {
+		return nil
+	}
 	return &Client{
-		apiKey:  apiKey,
-		baseURL: BaseURL,
-		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
+		client: openai.NewClient(apiKey),
+	}
+}
+
+// ChatCompletion 聊天完成
+func (c *Client) ChatCompletion(ctx context.Context, messages []ai.ChatMessage, model string, temperature float64, maxTokens int) (*ai.AgentResponse, error) {
+	if c.client == nil {
+		return nil, errors.New("OpenAI client not initialized")
+	}
+
+	// 转换消息格式
+	openaiMessages := make([]openai.ChatCompletionMessage, len(messages))
+	for i, msg := range messages {
+		openaiMessages[i] = openai.ChatCompletionMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
+
+	// 调用 API
+	resp, err := c.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model:       model,
+		Messages:    openaiMessages,
+		Temperature: float32(temperature),
+		MaxTokens:   maxTokens,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(resp.Choices) == 0 {
+		return nil, errors.New("no response from OpenAI")
+	}
+
+	return &ai.AgentResponse{
+		Content:    resp.Choices[0].Message.Content,
+		TokensUsed: resp.Usage.TotalTokens,
+		Metadata: map[string]interface{}{
+			"model":          resp.Model,
+			"finish_reason":  resp.Choices[0].FinishReason,
+			"prompt_tokens":  resp.Usage.PromptTokens,
+			"completion_tokens": resp.Usage.CompletionTokens,
 		},
-	}
+	}, nil
 }
 
-// ChatMessage 聊天消息
-type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-// ChatRequest 聊天请求
-type ChatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	Temperature float64       `json:"temperature,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Stream      bool          `json:"stream,omitempty"`
-}
-
-// ChatResponse 聊天响应
-type ChatResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index   int `json:"index"`
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-// CreateChatCompletion 创建聊天完成
-func (c *Client) CreateChatCompletion(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
-	if req.Model == "" {
-		req.Model = DefaultModel
+// ChatCompletionStream 流式聊天完成
+func (c *Client) ChatCompletionStream(ctx context.Context, messages []ai.ChatMessage, model string, temperature float64, maxTokens int, callback func(string)) error {
+	if c.client == nil {
+		return errors.New("OpenAI client not initialized")
 	}
 
-	body, err := json.Marshal(req)
+	// 转换消息格式
+	openaiMessages := make([]openai.ChatCompletionMessage, len(messages))
+	for i, msg := range messages {
+		openaiMessages[i] = openai.ChatCompletionMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
+
+	// 创建流式请求
+	stream, err := c.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
+		Model:       model,
+		Messages:    openaiMessages,
+		Temperature: float32(temperature),
+		MaxTokens:   maxTokens,
+		Stream:      true,
+	})
+
 	if err != nil {
-		return nil, err
+		return err
+	}
+	defer stream.Close()
+
+	// 接收流式响应
+	for {
+		response, err := stream.Recv()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			return err
+		}
+
+		if len(response.Choices) > 0 {
+			callback(response.Choices[0].Delta.Content)
+		}
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("OpenAI API error: %s", string(body))
-	}
-
-	var chatResp ChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		return nil, err
-	}
-
-	return &chatResp, nil
-}
-
-// EmbeddingRequest 嵌入请求
-type EmbeddingRequest struct {
-	Model string   `json:"model"`
-	Input []string `json:"input"`
-}
-
-// EmbeddingResponse 嵌入响应
-type EmbeddingResponse struct {
-	Object string `json:"object"`
-	Data   []struct {
-		Object    string    `json:"object"`
-		Embedding []float32 `json:"embedding"`
-		Index     int       `json:"index"`
-	} `json:"data"`
-	Model string `json:"model"`
-	Usage struct {
-		PromptTokens int `json:"prompt_tokens"`
-		TotalTokens  int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-// CreateEmbedding 创建嵌入
-func (c *Client) CreateEmbedding(ctx context.Context, texts []string) ([][]float32, error) {
-	req := &EmbeddingRequest{
-		Model: DefaultEmbedModel,
-		Input: texts,
-	}
-
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, err
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/embeddings", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("OpenAI API error: %s", string(body))
-	}
-
-	var embeddingResp EmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&embeddingResp); err != nil {
-		return nil, err
-	}
-
-	if len(embeddingResp.Data) == 0 {
-		return nil, errors.New("no embeddings returned")
-	}
-
-	embeddings := make([][]float32, len(embeddingResp.Data))
-	for i, data := range embeddingResp.Data {
-		embeddings[i] = data.Embedding
-	}
-
-	return embeddings, nil
+	return nil
 }

@@ -10,10 +10,22 @@ type Agent interface {
 	GetDescription() string
 }
 
+// AgentConfig Agent配置
+type AgentConfig struct {
+	AgentKey     string   `json:"agent_key"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	SystemPrompt string   `json:"system_prompt"`
+	Model        string   `json:"model"`
+	Temperature  float64  `json:"temperature"`
+	MaxTokens    int      `json:"max_tokens"`
+	Tools        []string `json:"tools"`
+}
+
 // AgentRequest Agent请求
 type AgentRequest struct {
 	Prompt      string                 `json:"prompt"`
-	Context     string                 `json:"context"`
+	Context     map[string]interface{} `json:"context"`      // 修复: string -> map
 	ProjectID   int                    `json:"project_id"`
 	Metadata    map[string]interface{} `json:"metadata"`
 	MaxTokens   int                    `json:"max_tokens"`

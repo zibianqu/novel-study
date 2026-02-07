@@ -1,12 +1,14 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/zibianqu/novel-study/internal/ai"
+	"github.com/zibianqu/novel-study/internal/ai/rag"
 	"github.com/zibianqu/novel-study/internal/config"
 	"github.com/zibianqu/novel-study/internal/handler"
 	"github.com/zibianqu/novel-study/internal/middleware"
@@ -43,21 +45,30 @@ func main() {
 	aiEngine := ai.NewEngine(cfg)
 	log.Printf("✅ AI 引擎初始化完成，已注册 %d 个 Agent", len(aiEngine.ListAgents()))
 
+	// 初始化 RAG 系统
+	embeddingService := rag.NewEmbeddingService(cfg.OpenAIAPIKey)
+	vectorStore := rag.NewVectorStore(db)
+	retriever := rag.NewRetriever(embeddingService, vectorStore)
+	log.Println("✅ RAG 系统初始化完成")
+
 	// 初始化 Repository
 	projectRepo := repository.NewProjectRepository(db)
 	chapterRepo := repository.NewChapterRepository(db)
 	agentRepo := repository.NewAgentRepository(db)
+	knowledgeRepo := repository.NewKnowledgeRepository(db)
 
 	// 初始化 Service
 	projectService := service.NewProjectService(projectRepo)
 	chapterService := service.NewChapterService(chapterRepo, projectRepo)
 	aiService := service.NewAIService(aiEngine, agentRepo, projectRepo)
+	knowledgeService := service.NewKnowledgeService(knowledgeRepo, projectRepo, retriever)
 
 	// 初始化 Handler
 	authHandler := handler.NewAuthHandler(db, cfg)
 	projectHandler := handler.NewProjectHandler(projectService)
 	chapterHandler := handler.NewChapterHandler(chapterService)
 	aiHandler := handler.NewAIHandler(aiService)
+	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeService)
 
 	// 初始化 Gin
 	if cfg.Environment == "production" {
@@ -76,7 +87,7 @@ func main() {
 	router.StaticFile("/dashboard.html", "./frontend/dashboard.html")
 	router.StaticFile("/project.html", "./frontend/project.html")
 	router.StaticFile("/editor.html", "./frontend/editor.html")
-	router.StaticFile("/ai-chat.html", "./frontend/ai-chat.html")
+	router.StaticFile("/knowledge.html", "./frontend/knowledge.html")
 
 	// API 路由组
 	api := router.Group("/api/v1")
@@ -126,6 +137,13 @@ func main() {
 			protected.POST("/ai/chat/stream", middleware.SSE(), aiHandler.ChatStream)
 			protected.POST("/ai/generate/chapter", aiHandler.GenerateChapter)
 			protected.POST("/ai/check/quality", aiHandler.CheckQuality)
+
+			// 知识库
+			protected.GET("/knowledge/project/:projectId", knowledgeHandler.GetProjectKnowledge)
+			protected.POST("/knowledge", knowledgeHandler.CreateKnowledge)
+			protected.GET("/knowledge/:id", knowledgeHandler.GetKnowledge)
+			protected.DELETE("/knowledge/:id", knowledgeHandler.DeleteKnowledge)
+			protected.POST("/knowledge/search", knowledgeHandler.SearchKnowledge)
 		}
 	}
 
@@ -138,6 +156,7 @@ func main() {
 	log.Println("✨ ========================================")
 	log.Printf("🚀 NovelForge AI 服务器启动成功")
 	log.Printf("🎬 7 个核心 Agent 已就绪")
+	log.Printf("🧠 RAG 知识库系统已启用")
 	log.Printf("🔗 前端: http://localhost:%s", port)
 	log.Printf("📚 API: http://localhost:%s/api/v1", port)
 	log.Println("✨ ========================================")

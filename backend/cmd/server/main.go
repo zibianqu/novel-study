@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"log"
 	"os"
 
@@ -56,12 +55,14 @@ func main() {
 	chapterRepo := repository.NewChapterRepository(db)
 	agentRepo := repository.NewAgentRepository(db)
 	knowledgeRepo := repository.NewKnowledgeRepository(db)
+	neo4jRepo := repository.NewNeo4jRepository(neo4jDriver)
 
 	// 初始化 Service
 	projectService := service.NewProjectService(projectRepo)
 	chapterService := service.NewChapterService(chapterRepo, projectRepo)
 	aiService := service.NewAIService(aiEngine, agentRepo, projectRepo)
 	knowledgeService := service.NewKnowledgeService(knowledgeRepo, projectRepo, retriever)
+	graphService := service.NewGraphService(neo4jRepo, projectRepo)
 
 	// 初始化 Handler
 	authHandler := handler.NewAuthHandler(db, cfg)
@@ -69,6 +70,8 @@ func main() {
 	chapterHandler := handler.NewChapterHandler(chapterService)
 	aiHandler := handler.NewAIHandler(aiService)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeService)
+	graphHandler := handler.NewGraphHandler(graphService)
+	storylineHandler := handler.NewStorylineHandler(db)
 
 	// 初始化 Gin
 	if cfg.Environment == "production" {
@@ -88,6 +91,8 @@ func main() {
 	router.StaticFile("/project.html", "./frontend/project.html")
 	router.StaticFile("/editor.html", "./frontend/editor.html")
 	router.StaticFile("/knowledge.html", "./frontend/knowledge.html")
+	router.StaticFile("/graph.html", "./frontend/graph.html")
+	router.StaticFile("/storyline.html", "./frontend/storyline.html")
 
 	// API 路由组
 	api := router.Group("/api/v1")
@@ -104,17 +109,6 @@ func main() {
 		protected := api.Group("")
 		protected.Use(middleware.JWTAuth(cfg.JWTSecret))
 		{
-			// 用户信息
-			protected.GET("/profile", func(c *gin.Context) {
-				userID := c.GetInt("user_id")
-				username := c.GetString("username")
-				c.JSON(200, gin.H{
-					"user_id":  userID,
-					"username": username,
-					"message":  "认证成功",
-				})
-			})
-
 			// 项目管理
 			protected.GET("/projects", projectHandler.GetProjects)
 			protected.POST("/projects", projectHandler.CreateProject)
@@ -128,8 +122,6 @@ func main() {
 			protected.GET("/chapters/:id", chapterHandler.GetChapter)
 			protected.PUT("/chapters/:id", chapterHandler.UpdateChapter)
 			protected.DELETE("/chapters/:id", chapterHandler.DeleteChapter)
-			protected.POST("/chapters/:id/lock", chapterHandler.LockChapter)
-			protected.POST("/chapters/:id/unlock", chapterHandler.UnlockChapter)
 
 			// AI 功能
 			protected.GET("/ai/agents", aiHandler.GetAgents)
@@ -144,6 +136,15 @@ func main() {
 			protected.GET("/knowledge/:id", knowledgeHandler.GetKnowledge)
 			protected.DELETE("/knowledge/:id", knowledgeHandler.DeleteKnowledge)
 			protected.POST("/knowledge/search", knowledgeHandler.SearchKnowledge)
+
+			// 知识图谱
+			protected.GET("/graph/project/:projectId", graphHandler.GetProjectGraph)
+			protected.POST("/graph/node", graphHandler.CreateNode)
+			protected.POST("/graph/relation", graphHandler.CreateRelation)
+
+			// 三线管理
+			protected.GET("/storylines/project/:projectId", storylineHandler.GetProjectStorylines)
+			protected.POST("/storylines", storylineHandler.CreateStoryline)
 		}
 	}
 
@@ -157,6 +158,7 @@ func main() {
 	log.Printf("🚀 NovelForge AI 服务器启动成功")
 	log.Printf("🎬 7 个核心 Agent 已就绪")
 	log.Printf("🧠 RAG 知识库系统已启用")
+	log.Printf("🕸️ Neo4j 知识图谱已连接")
 	log.Printf("🔗 前端: http://localhost:%s", port)
 	log.Printf("📚 API: http://localhost:%s/api/v1", port)
 	log.Println("✨ ========================================")

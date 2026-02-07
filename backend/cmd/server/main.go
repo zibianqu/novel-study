@@ -69,8 +69,14 @@ func main() {
 	router.Use(middleware.CORS())
 
 	// 静态文件服务
-	router.Static("/static", "./static")
-	router.StaticFile("/", "./static/index.html")
+	router.Static("/css", "./frontend/css")
+	router.Static("/js", "./frontend/js")
+	router.StaticFile("/", "./frontend/index.html")
+	router.StaticFile("/index.html", "./frontend/index.html")
+	router.StaticFile("/dashboard.html", "./frontend/dashboard.html")
+	router.StaticFile("/project.html", "./frontend/project.html")
+	router.StaticFile("/editor.html", "./frontend/editor.html")
+	router.StaticFile("/ai-chat.html", "./frontend/ai-chat.html")
 
 	// API 路由组
 	api := router.Group("/api/v1")

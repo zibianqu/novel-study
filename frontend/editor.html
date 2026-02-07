@@ -6,9 +6,7 @@
     <title>章节编辑器 - NovelForge AI</title>
     <link rel="stylesheet" href="https://cdn.staticfile.org/layui/2.8.18/css/layui.css">
     <link rel="stylesheet" href="css/style.css">
-    <style>
-        #editor { height: calc(100vh - 120px); border: 1px solid #ddd; }
-    </style>
+    <link rel="stylesheet" href="css/editor.css">
 </head>
 <body class="layui-layout-body">
     <div class="layui-layout layui-layout-admin">
@@ -23,7 +21,7 @@
             <ul class="layui-nav layui-layout-right">
                 <li class="layui-nav-item">
                     <button class="layui-btn layui-btn-sm layui-btn-primary" id="saveBtn">
-                        <i class="layui-icon layui-icon-ok"></i> 保存
+                        <i class="layui-icon layui-icon-ok"></i> 保存 (Ctrl+S)
                     </button>
                 </li>
                 <li class="layui-nav-item">
@@ -31,25 +29,60 @@
                         <i class="layui-icon layui-icon-dialogue"></i> AI 助手
                     </button>
                 </li>
+                <li class="layui-nav-item">
+                    <a href="javascript:;"><span id="username">User</span></a>
+                </li>
             </ul>
         </div>
 
         <!-- 侧边栏 -->
-        <div class="layui-side layui-bg-black">
+        <div class="layui-side layui-bg-black" style="width: 250px;">
             <div class="layui-side-scroll">
-                <div style="padding: 15px; color: #fff;">
-                    <h3 id="projectTitle" style="margin: 0;">项目名称</h3>
-                    <p id="chapterInfo" style="margin: 5px 0; opacity: 0.7;">章节信息</p>
+                <div style="padding: 15px; color: #fff; border-bottom: 1px solid #333;">
+                    <h3 id="projectTitle" style="margin: 0; font-size: 16px;">项目名称</h3>
+                    <p style="margin: 5px 0 0 0; opacity: 0.7; font-size: 12px;">
+                        <span id="wordCount">0</span> 字 | 
+                        <span id="chapterCount">0</span> 章
+                    </p>
                 </div>
-                <ul class="layui-nav layui-nav-tree" id="chapterList">
-                    <!-- 章节列表 -->
+                
+                <div style="padding: 10px;">
+                    <button class="layui-btn layui-btn-sm layui-btn-fluid" id="addChapterBtn">
+                        <i class="layui-icon layui-icon-add-1"></i> 新建章节
+                    </button>
+                </div>
+
+                <ul class="layui-nav layui-nav-tree" id="chapterList" lay-filter="chapterNav">
+                    <!-- 章节列表将动态生成 -->
                 </ul>
             </div>
         </div>
 
         <!-- 主体 -->
-        <div class="layui-body">
-            <div id="editor"></div>
+        <div class="layui-body" style="left: 250px;">
+            <div class="editor-toolbar">
+                <div class="current-chapter-info">
+                    <input type="text" id="chapterTitle" class="layui-input" placeholder="章节标题" style="width: 300px; display: inline-block;">
+                    <span class="editor-status" id="editorStatus">未保存</span>
+                </div>
+                <div class="editor-stats">
+                    <span>当前字数: <strong id="currentWordCount">0</strong></span>
+                </div>
+            </div>
+            <div id="editor" style="height: calc(100vh - 140px);"></div>
+        </div>
+    </div>
+
+    <!-- AI 对话浮窗 -->
+    <div id="aiChatPanel" class="ai-chat-panel" style="display: none;">
+        <div class="ai-chat-header">
+            <h3>🤖 AI 创作助手</h3>
+            <button class="close-btn" id="closeChatBtn">×</button>
+        </div>
+        <div class="ai-chat-messages" id="chatMessages"></div>
+        <div class="ai-chat-input">
+            <textarea id="chatInput" class="layui-textarea" placeholder="输入你的需求，AI 将帮助你创作..."></textarea>
+            <button class="layui-btn layui-btn-sm" id="sendChatBtn">发送</button>
         </div>
     </div>
 
@@ -57,12 +90,8 @@
     <script src="https://cdn.staticfile.org/monaco-editor/0.44.0/min/vs/loader.js"></script>
     <script src="js/config.js"></script>
     <script src="js/api.js"></script>
-    <script>
-        // Monaco Editor 将在下一批实现
-        layui.use(['layer'], function() {
-            const layer = layui.layer;
-            layer.msg('编辑器功能即将上线！');
-        });
-    </script>
+    <script src="js/chapter.js"></script>
+    <script src="js/editor.js"></script>
+    <script src="js/ai-chat.js"></script>
 </body>
 </html>

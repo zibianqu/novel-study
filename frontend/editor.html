@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>章节编辑器 - NovelForge AI</title>
+    <link rel="stylesheet" href="https://cdn.staticfile.org/layui/2.8.18/css/layui.css">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        #editor { height: calc(100vh - 120px); border: 1px solid #ddd; }
+    </style>
+</head>
+<body class="layui-layout-body">
+    <div class="layui-layout layui-layout-admin">
+        <!-- 头部 -->
+        <div class="layui-header">
+            <div class="layui-logo">🎬 NovelForge AI</div>
+            <ul class="layui-nav layui-layout-left">
+                <li class="layui-nav-item"><a href="dashboard.html">仪表板</a></li>
+                <li class="layui-nav-item"><a href="project.html">我的项目</a></li>
+                <li class="layui-nav-item layui-this"><a href="javascript:;">编辑器</a></li>
+            </ul>
+            <ul class="layui-nav layui-layout-right">
+                <li class="layui-nav-item">
+                    <button class="layui-btn layui-btn-sm layui-btn-primary" id="saveBtn">
+                        <i class="layui-icon layui-icon-ok"></i> 保存
+                    </button>
+                </li>
+                <li class="layui-nav-item">
+                    <button class="layui-btn layui-btn-sm layui-btn-normal" id="aiAssistBtn">
+                        <i class="layui-icon layui-icon-dialogue"></i> AI 助手
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <!-- 侧边栏 -->
+        <div class="layui-side layui-bg-black">
+            <div class="layui-side-scroll">
+                <div style="padding: 15px; color: #fff;">
+                    <h3 id="projectTitle" style="margin: 0;">项目名称</h3>
+                    <p id="chapterInfo" style="margin: 5px 0; opacity: 0.7;">章节信息</p>
+                </div>
+                <ul class="layui-nav layui-nav-tree" id="chapterList">
+                    <!-- 章节列表 -->
+                </ul>
+            </div>
+        </div>
+
+        <!-- 主体 -->
+        <div class="layui-body">
+            <div id="editor"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.staticfile.org/layui/2.8.18/layui.js"></script>
+    <script src="https://cdn.staticfile.org/monaco-editor/0.44.0/min/vs/loader.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script>
+        // Monaco Editor 将在下一批实现
+        layui.use(['layer'], function() {
+            const layer = layui.layer;
+            layer.msg('编辑器功能即将上线！');
+        });
+    </script>
+</body>
+</html>

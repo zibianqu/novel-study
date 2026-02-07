@@ -1,56 +1,35 @@
 package ai
 
-import (
-	"context"
-)
+import "context"
 
-// AgentConfig Agent配置
-type AgentConfig struct {
-	AgentKey     string
-	Name         string
-	SystemPrompt string
-	Model        string
-	Temperature  float64
-	MaxTokens    int
-	Tools        []string
+// Agent 接口定义
+type Agent interface {
+	Execute(ctx context.Context, req *AgentRequest) (*AgentResponse, error)
+	ExecuteStream(ctx context.Context, req *AgentRequest, callback func(string)) error
+	GetName() string
+	GetDescription() string
 }
 
 // AgentRequest Agent请求
 type AgentRequest struct {
-	UserID      int
-	ProjectID   int
-	ChapterID   *int
-	Prompt      string
-	Context     map[string]interface{}
-	Stream      bool
+	Prompt      string                 `json:"prompt"`
+	Context     string                 `json:"context"`
+	ProjectID   int                    `json:"project_id"`
+	Metadata    map[string]interface{} `json:"metadata"`
+	MaxTokens   int                    `json:"max_tokens"`
+	Temperature float64                `json:"temperature"`
 }
 
 // AgentResponse Agent响应
 type AgentResponse struct {
-	Content      string
-	TokensUsed   int
-	DurationMs   int64
-	Metadata     map[string]interface{}
-	Error        string
-}
-
-// Agent 接口
-type Agent interface {
-	GetConfig() *AgentConfig
-	Execute(ctx context.Context, req *AgentRequest) (*AgentResponse, error)
-	ExecuteStream(ctx context.Context, req *AgentRequest, callback func(string)) error
+	Content    string                 `json:"content"`
+	TokensUsed int                    `json:"tokens_used"`
+	DurationMs int64                  `json:"duration_ms"`
+	Metadata   map[string]interface{} `json:"metadata"`
 }
 
 // ChatMessage 聊天消息
 type ChatMessage struct {
-	Role    string `json:"role"`    // system, user, assistant
+	Role    string `json:"role"`    // "system", "user", "assistant"
 	Content string `json:"content"`
-}
-
-// QualityScore 质量评分
-type QualityScore struct {
-	OverallScore int                    `json:"overall_score"`
-	Passed       bool                   `json:"passed"`
-	Dimensions   map[string]interface{} `json:"dimensions"`
-	Feedback     map[string]string      `json:"feedback"`
 }

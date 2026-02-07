@@ -37,7 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Neo4j 连接失败: %v", err)
 	}
-	defer neo4jDriver.Close()
+	defer neo4jDriver.Close(context.Background())
 	log.Println("✅ Neo4j 连接成功")
 
 	// 初始化 AI 引擎
@@ -72,6 +72,7 @@ func main() {
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeService)
 	graphHandler := handler.NewGraphHandler(graphService)
 	storylineHandler := handler.NewStorylineHandler(db)
+	healthHandler := handler.NewHealthHandler(db, neo4jDriver)
 
 	// 初始化 Gin
 	if cfg.Environment == "production" {
@@ -97,6 +98,11 @@ func main() {
 	// API 路由组
 	api := router.Group("/api/v1")
 	{
+		// 健康检查接口（公开）
+		api.GET("/health", healthHandler.HealthCheck)
+		api.GET("/ready", healthHandler.ReadinessCheck)
+		api.GET("/alive", healthHandler.LivenessCheck)
+
 		// 公开接口
 		auth := api.Group("/auth")
 		{
@@ -161,6 +167,7 @@ func main() {
 	log.Printf("🕸️ Neo4j 知识图谱已连接")
 	log.Printf("🔗 前端: http://localhost:%s", port)
 	log.Printf("📚 API: http://localhost:%s/api/v1", port)
+	log.Printf("❤️ Health: http://localhost:%s/api/v1/health", port)
 	log.Println("✨ ========================================")
 	log.Println("")
 

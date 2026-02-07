@@ -58,9 +58,9 @@ func (c *Client) ChatCompletion(ctx context.Context, messages []ai.ChatMessage, 
 		Content:    resp.Choices[0].Message.Content,
 		TokensUsed: resp.Usage.TotalTokens,
 		Metadata: map[string]interface{}{
-			"model":          resp.Model,
-			"finish_reason":  resp.Choices[0].FinishReason,
-			"prompt_tokens":  resp.Usage.PromptTokens,
+			"model":             resp.Model,
+			"finish_reason":     resp.Choices[0].FinishReason,
+			"prompt_tokens":     resp.Usage.PromptTokens,
 			"completion_tokens": resp.Usage.CompletionTokens,
 		},
 	}, nil
@@ -111,4 +111,33 @@ func (c *Client) ChatCompletionStream(ctx context.Context, messages []ai.ChatMes
 	}
 
 	return nil
+}
+
+// CreateEmbedding 创建向量嵌入
+func (c *Client) CreateEmbedding(ctx context.Context, texts []string) ([][]float32, error) {
+	if c.client == nil {
+		return nil, errors.New("OpenAI client not initialized")
+	}
+
+	if len(texts) == 0 {
+		return [][]float32{}, nil
+	}
+
+	// 调用 OpenAI Embedding API
+	resp, err := c.client.CreateEmbeddings(ctx, openai.EmbeddingRequest{
+		Model: openai.AdaEmbeddingV2, // text-embedding-ada-002
+		Input: texts,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为 [][]float32
+	embeddings := make([][]float32, len(resp.Data))
+	for i, data := range resp.Data {
+		embeddings[i] = data.Embedding
+	}
+
+	return embeddings, nil
 }

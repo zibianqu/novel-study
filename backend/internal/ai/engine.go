@@ -19,6 +19,7 @@ import (
 type Engine struct {
 	config         *config.Config
 	agents         map[string]Agent
+	agentsByID     map[int]Agent // Agent ID 索引
 	apiKey         string
 	mu             sync.RWMutex // 保护并发访问
 	toolRegistry   *tools.ToolRegistry
@@ -46,6 +47,7 @@ func NewEngine(
 	engine := &Engine{
 		config:        cfg,
 		agents:        make(map[string]Agent),
+		agentsByID:    make(map[int]Agent),
 		apiKey:        cfg.OpenAIAPIKey,
 		toolRegistry:  toolRegistry,
 		retriever:     retriever,
@@ -88,32 +90,33 @@ func (e *Engine) RegisterTools() {
 // RegisterCoreAgents 注册核心Agent
 func (e *Engine) RegisterCoreAgents() {
 	// Agent 0: 总导演
-	e.RegisterAgent("agent_0_director", agents.NewDirectorAgent(e.apiKey, e.toolRegistry))
+	e.RegisterAgent("agent_0_director", 0, agents.NewDirectorAgent(e.apiKey, e.toolRegistry))
 
 	// Agent 1: 旁白叙述者
-	e.RegisterAgent("agent_1_narrator", agents.NewNarratorAgent(e.apiKey, e.toolRegistry))
+	e.RegisterAgent("agent_1_narrator", 1, agents.NewNarratorAgent(e.apiKey, e.toolRegistry))
 
 	// Agent 2: 角色扮演者
-	e.RegisterAgent("agent_2_character", agents.NewCharacterAgent(e.apiKey, e.toolRegistry))
+	e.RegisterAgent("agent_2_character", 2, agents.NewCharacterAgent(e.apiKey, e.toolRegistry))
 
 	// Agent 3: 审核导演
-	e.RegisterAgent("agent_3_quality", agents.NewQualityAgent(e.apiKey, e.toolRegistry))
+	e.RegisterAgent("agent_3_quality", 3, agents.NewQualityAgent(e.apiKey, e.toolRegistry))
 
 	// Agent 4: 天线掌控者
-	e.RegisterAgent("agent_4_skyline", agents.NewSkylineAgent(e.apiKey, e.toolRegistry))
+	e.RegisterAgent("agent_4_skyline", 4, agents.NewSkylineAgent(e.apiKey, e.toolRegistry))
 
 	// Agent 5: 地线掌控者
-	e.RegisterAgent("agent_5_groundline", agents.NewGroundlineAgent(e.apiKey, e.toolRegistry))
+	e.RegisterAgent("agent_5_groundline", 5, agents.NewGroundlineAgent(e.apiKey, e.toolRegistry))
 
 	// Agent 6: 剧情线掌控者
-	e.RegisterAgent("agent_6_plotline", agents.NewPlotlineAgent(e.apiKey, e.toolRegistry))
+	e.RegisterAgent("agent_6_plotline", 6, agents.NewPlotlineAgent(e.apiKey, e.toolRegistry))
 }
 
 // RegisterAgent 注册Agent（线程安全）
-func (e *Engine) RegisterAgent(key string, agent Agent) {
+func (e *Engine) RegisterAgent(key string, id int, agent Agent) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.agents[key] = agent
+	e.agentsByID[id] = agent
 }
 
 // GetAgent 获取Agent（线程安全）
@@ -124,6 +127,18 @@ func (e *Engine) GetAgent(key string) (Agent, error) {
 	agent, ok := e.agents[key]
 	if !ok {
 		return nil, fmt.Errorf("agent not found: %s", key)
+	}
+	return agent, nil
+}
+
+// GetAgentByID 根据ID获取Agent
+func (e *Engine) GetAgentByID(id int) (Agent, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	agent, ok := e.agentsByID[id]
+	if !ok {
+		return nil, fmt.Errorf("agent not found with id: %d", id)
 	}
 	return agent, nil
 }
@@ -157,8 +172,32 @@ func (e *Engine) ExecuteAgent(ctx context.Context, agentKey string, req *AgentRe
 	return resp, nil
 }
 
+// ExecuteAgentByID 根据ID执行Agent
+func (e *Engine) ExecuteAgentByID(ctx context.Context, agentID int, req *AgentRequest) (*AgentResponse, error) {
+	// 检查上下文是否已取消
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	agent, err := e.GetAgentByID(agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	startTime := time.Now()
+	resp, err := agent.Execute(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("agent execution failed: %w", err)
+	}
+
+	resp.DurationMs = time.Since(startTime).Milliseconds()
+	return resp, nil
+}
+
 // ExecuteAgentStream 流式执行Agent
-func (e *Engine) ExecuteAgentStream(ctx context.Context, agentKey string, req *AgentRequest, callback func(string)) error {
+func (e *Engine) ExecuteAgentStream(ctx context.Context, agentID int, req *AgentRequest, callback func(string)) error {
 	// 检查上下文是否已取消
 	select {
 	case <-ctx.Done():
@@ -166,7 +205,7 @@ func (e *Engine) ExecuteAgentStream(ctx context.Context, agentKey string, req *A
 	default:
 	}
 
-	agent, err := e.GetAgent(agentKey)
+	agent, err := e.GetAgentByID(agentID)
 	if err != nil {
 		return err
 	}

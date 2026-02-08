@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // Tool Agent工具接口
@@ -15,18 +16,26 @@ type Tool interface {
 // ToolRegistry 工具注册表
 type ToolRegistry struct {
 	tools map[string]Tool
+	logger ToolCallLogger
+}
+
+// ToolCallLogger 工具调用日志接口
+type ToolCallLogger interface {
+	Log(agentID int, toolName string, params map[string]interface{}, result interface{}, err error, duration time.Duration)
 }
 
 // NewToolRegistry 创建工具注册表
-func NewToolRegistry() *ToolRegistry {
+func NewToolRegistry(logger ToolCallLogger) *ToolRegistry {
 	return &ToolRegistry{
-		tools: make(map[string]Tool),
+		tools:  make(map[string]Tool),
+		logger: logger,
 	}
 }
 
 // Register 注册工具
 func (r *ToolRegistry) Register(tool Tool) {
 	r.tools[tool.GetName()] = tool
+	fmt.Printf("✅ 工具注册成功: %s - %s\n", tool.GetName(), tool.GetDescription())
 }
 
 // Get 获取工具
@@ -38,34 +47,49 @@ func (r *ToolRegistry) Get(name string) (Tool, error) {
 	return tool, nil
 }
 
-// RAGSearchTool RAG检索工具
-type RAGSearchTool struct{}
+// Execute 执行工具并记录日志
+func (r *ToolRegistry) Execute(ctx context.Context, agentID int, toolName string, params map[string]interface{}) (interface{}, error) {
+	tool, err := r.Get(toolName)
+	if err != nil {
+		return nil, err
+	}
 
-func (t *RAGSearchTool) GetName() string {
-	return "rag_search"
+	startTime := time.Now()
+	result, execErr := tool.Execute(ctx, params)
+	duration := time.Since(startTime)
+
+	// 记录日志
+	if r.logger != nil {
+		r.logger.Log(agentID, toolName, params, result, execErr, duration)
+	}
+
+	return result, execErr
 }
 
-func (t *RAGSearchTool) GetDescription() string {
-	return "从知识库中检索相关内容"
+// ListTools 列出所有可用工具
+func (r *ToolRegistry) ListTools() []ToolInfo {
+	tools := make([]ToolInfo, 0, len(r.tools))
+	for name, tool := range r.tools {
+		tools = append(tools, ToolInfo{
+			Name:        name,
+			Description: tool.GetDescription(),
+		})
+	}
+	return tools
 }
 
-func (t *RAGSearchTool) Execute(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	// TODO: 实现RAG检索
-	return "模拟RAG检索结果", nil
+// ToolInfo 工具信息
+type ToolInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
-// Neo4jQueryTool Neo4j查询工具
-type Neo4jQueryTool struct{}
-
-func (t *Neo4jQueryTool) GetName() string {
-	return "query_neo4j"
-}
-
-func (t *Neo4jQueryTool) GetDescription() string {
-	return "查询知识图谱中的关系数据"
-}
-
-func (t *Neo4jQueryTool) Execute(ctx context.Context, params map[string]interface{}) (interface{}, error) {
-	// TODO: 实现Neo4j查询
-	return "模拟Neo4j查询结果", nil
+// ToolCallResult 工具调用结果
+type ToolCallResult struct {
+	ToolName   string                 `json:"tool_name"`
+	Success    bool                   `json:"success"`
+	Result     interface{}            `json:"result,omitempty"`
+	Error      string                 `json:"error,omitempty"`
+	DurationMs int64                  `json:"duration_ms"`
+	Params     map[string]interface{} `json:"params,omitempty"`
 }

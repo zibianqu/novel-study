@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三线管理 - NovelForge AI</title>
+    <link rel="stylesheet" href="https://cdn.staticfile.org/layui/2.8.18/css/layui.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="layui-layout-body">
+    <div class="layui-layout layui-layout-admin">
+        <!-- 头部 -->
+        <div class="layui-header">
+            <div class="layui-logo">🎬 NovelForge AI</div>
+            <ul class="layui-nav layui-layout-left">
+                <li class="layui-nav-item"><a href="dashboard.html">仪表板</a></li>
+                <li class="layui-nav-item"><a href="project.html">我的项目</a></li>
+                <li class="layui-nav-item layui-this"><a href="javascript:;">三线管理</a></li>
+            </ul>
+            <ul class="layui-nav layui-layout-right">
+                <li class="layui-nav-item">
+                    <a href="javascript:;"><span id="username">User</span></a>
+                    <dl class="layui-nav-child">
+                        <dd><a href="javascript:;" id="logout">退出登录</a></dd>
+                    </dl>
+                </li>
+            </ul>
+        </div>
+
+        <!-- 主体 -->
+        <div class="layui-body" style="padding: 20px;">
+            <!-- 天线（Skyline）-->
+            <div class="layui-card">
+                <div class="layui-card-header">
+                    <span>🌍 天线 - 世界命运</span>
+                    <button class="layui-btn layui-btn-xs layui-btn-normal" style="float: right;" onclick="addStoryline('skyline')">
+                        <i class="layui-icon layui-icon-add-1"></i> 添加节点
+                    </button>
+                </div>
+                <div class="layui-card-body">
+                    <div id="skylineList" class="storyline-timeline"></div>
+                </div>
+            </div>
+
+            <!-- 地线（Groundline）-->
+            <div class="layui-card" style="margin-top: 20px;">
+                <div class="layui-card-header">
+                    <span>🌱 地线 - 主角成长</span>
+                    <button class="layui-btn layui-btn-xs layui-btn-normal" style="float: right;" onclick="addStoryline('groundline')">
+                        <i class="layui-icon layui-icon-add-1"></i> 添加节点
+                    </button>
+                </div>
+                <div class="layui-card-body">
+                    <div id="groundlineList" class="storyline-timeline"></div>
+                </div>
+            </div>
+
+            <!-- 剧情线（Plotline）-->
+            <div class="layui-card" style="margin-top: 20px;">
+                <div class="layui-card-header">
+                    <span>🎯 剧情线 - 情节推进</span>
+                    <button class="layui-btn layui-btn-xs layui-btn-normal" style="float: right;" onclick="addStoryline('plotline')">
+                        <i class="layui-icon layui-icon-add-1"></i> 添加节点
+                    </button>
+                </div>
+                <div class="layui-card-body">
+                    <div id="plotlineList" class="storyline-timeline"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部 -->
+        <div class="layui-footer">
+            &copy; 2026 NovelForge AI - Powered by Eino AI
+        </div>
+    </div>
+
+    <script src="https://cdn.staticfile.org/layui/2.8.18/layui.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/storyline.js"></script>
+</body>
+</html>

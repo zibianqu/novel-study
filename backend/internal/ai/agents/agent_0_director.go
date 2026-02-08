@@ -1,7 +1,8 @@
 package agents
 
 import (
-	"github.com/zibianqu/novel-study/internal/ai"
+	"novel-study/backend/internal/ai"
+	"novel-study/backend/internal/ai/tools"
 )
 
 // DirectorAgent Agent 0: 总导演
@@ -10,7 +11,7 @@ type DirectorAgent struct {
 }
 
 // NewDirectorAgent 创建总导演Agent
-func NewDirectorAgent(apiKey string) *DirectorAgent {
+func NewDirectorAgent(apiKey string, toolRegistry *tools.ToolRegistry) *DirectorAgent {
 	config := &ai.AgentConfig{
 		AgentKey: "agent_0_director",
 		Name:     "总导演 (Chief Director)",
@@ -32,10 +33,18 @@ func NewDirectorAgent(apiKey string) *DirectorAgent {
 		Model:       "gpt-4o",
 		Temperature: 0.5,
 		MaxTokens:   4096,
-		Tools:       []string{"dispatch_agent", "query_neo4j", "rag_search", "get_project_status"},
+		Tools: []string{
+			"rag_search",
+			"query_neo4j",
+			"get_project_status",
+			"get_storyline_status",
+			"get_chapter_content",
+			"update_storyline",
+			"create_storyline",
+		},
 	}
 
 	return &DirectorAgent{
-		BaseAgent: NewBaseAgent(config, apiKey),
+		BaseAgent: NewBaseAgent(config, apiKey, toolRegistry, 0),
 	}
 }

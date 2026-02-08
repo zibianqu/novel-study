@@ -47,18 +47,26 @@ func main() {
 	defer neo4jDriver.Close(context.Background())
 	log.Println("✅ Neo4j 连接成功")
 
-	// 初始化 Redis (可选)
-	// 如果需要Redis缓存，请取消下面注释
-	/*
-	redisClient, err := repository.NewRedisClient(cfg)
-	if err != nil {
-		log.Printf("警告: Redis 连接失败: %v", err)
-		redisClient = nil
-	} else {
-		defer redisClient.Close()
-		log.Println("✅ Redis 连接成功")
+	// 初始化 Redis
+	var redisClient *repository.RedisClient
+	var cacheService *service.CacheService
+	
+	if cfg.CacheEnabled {
+		redisClient, err = repository.NewRedisClient(
+			cfg.RedisHost,
+			cfg.RedisPort,
+			cfg.RedisPassword,
+			cfg.RedisDB,
+		)
+		if err != nil {
+			log.Printf("⚠️ Redis 连接失败: %v (缓存功能将被禁用)", err)
+			redisClient = nil
+		} else {
+			defer redisClient.Close()
+			cacheService = service.NewCacheService(redisClient)
+			log.Println("✅ Redis 连接成功 - 缓存系统已启用")
+		}
 	}
-	*/
 
 	// 初始化 AI 引擎
 	aiEngine := ai.NewEngine(cfg)
@@ -83,17 +91,12 @@ func main() {
 	aiService := service.NewAIService(aiEngine, agentRepo, projectRepo)
 	knowledgeService := service.NewKnowledgeService(knowledgeRepo, projectRepo, retriever)
 	graphService := service.NewGraphService(neo4jRepo, projectRepo)
-	
-	// 初始化 Cache Service (可选)
-	/*
-	var cacheService *service.CacheService
-	if redisClient != nil {
-		cacheService = service.NewCacheService(redisClient)
-	}
-	*/
 
-	// 初始化登录限流器 (5次尝试/1小时)
-	loginLimiter := middleware.NewLoginLimiter(5, 1*time.Hour)
+	// 初始化登录限流器
+	loginLimiter := middleware.NewLoginLimiter(
+		cfg.MaxLoginAttempts,
+		cfg.LoginBlockDuration,
+	)
 
 	// 初始化 Handler
 	authHandler := handler.NewAuthHandler(db, cfg, loginLimiter)
@@ -116,6 +119,7 @@ func main() {
 	router.Use(middleware.Recovery())         // 恢复中间件
 	router.Use(middleware.ErrorHandler())     // 错误处理
 	router.Use(middleware.CORS())             // CORS
+	router.Use(middleware.SanitizeInput())    // XSS防护
 	router.Use(middleware.TimeoutByPath())    // 超时控制
 	router.Use(middleware.RateLimitByPath())  // 限流
 
@@ -203,8 +207,18 @@ func main() {
 	log.Printf("🎬 7 个核心 Agent 已就绪")
 	log.Printf("🧠 RAG 知识库系统已启用")
 	log.Printf("🕸️ Neo4j 知识图谱已连接")
-	log.Printf("✅ 安全增强: 输入验证 + 登录限流 + 错误处理")
-	log.Printf("✅ 中间件: CORS + 超时 + 限流 + 日志")
+	
+	if cacheService != nil {
+		log.Printf("📦 Redis 缓存系统已启用")
+	}
+	
+	log.Printf("✅ 安全增强:")
+	log.Printf("   - 密码策略: 最少8位 + 字母 + 数字")
+	log.Printf("   - 登录限流: %d次/%v", cfg.MaxLoginAttempts, cfg.LoginBlockDuration)
+	log.Printf("   - API加密: AES-256-GCM")
+	log.Printf("   - 输入验证: XSS防护 + SQL注入防护")
+	
+	log.Printf("✅ 中间件: CORS + 超时 + 限流 + 日志 + 错误处理")
 	log.Printf("🔗 前端: http://localhost:%s", port)
 	log.Printf("📚 API: http://localhost:%s/api/v1", port)
 	log.Printf("❤️ Health: http://localhost:%s/api/v1/health", port)

@@ -3,8 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"novel-study/backend/internal/graph"
 	"strconv"
+
+	"github.com/zibianqu/novel-study/internal/graph"
 )
 
 // GraphHandler 知识图谱 API 处理器
@@ -216,7 +217,7 @@ func (h *GraphHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "healthy",
+		"status":  "healthy",
 		"service": "knowledge_graph",
 	})
 }

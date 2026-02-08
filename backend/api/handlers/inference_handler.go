@@ -3,8 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"novel-study/backend/internal/ai/inference"
 	"strconv"
+
+	"github.com/zibianqu/novel-study/internal/ai/inference"
 )
 
 // InferenceHandler 推演 API 处理器

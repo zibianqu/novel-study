@@ -3,7 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
-	"novel-study/backend/internal/repository"
+
+	"github.com/zibianqu/novel-study/internal/repository"
 )
 
 // GetProjectStatusTool 获取项目状态工具

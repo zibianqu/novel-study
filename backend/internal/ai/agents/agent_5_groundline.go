@@ -1,8 +1,8 @@
 package agents
 
 import (
-	"novel-study/backend/internal/ai"
-	"novel-study/backend/internal/ai/tools"
+	"github.com/zibianqu/novel-study/internal/ai"
+	"github.com/zibianqu/novel-study/internal/ai/tools"
 )
 
 // GroundlineAgent Agent 5: 地线掌控者

@@ -37,7 +37,7 @@ package main
 import (
     "context"
     "fmt"
-    "novel-study/backend/internal/ai/prompt"
+    "github.com/zibianqu/novel-study/internal/ai/prompt"
 )
 
 func main() {

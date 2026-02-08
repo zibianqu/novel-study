@@ -2,13 +2,14 @@ package config
 
 import (
 	"time"
-	"novel-study/backend/internal/graph"
+
+	"github.com/zibianqu/novel-study/internal/graph"
 )
 
 // GraphConfig 知识图谱配置
 type GraphConfig struct {
-	Enabled  bool
-	Neo4j    Neo4jConfig
+	Enabled   bool
+	Neo4j     Neo4jConfig
 	Extractor ExtractorConfig
 }
 

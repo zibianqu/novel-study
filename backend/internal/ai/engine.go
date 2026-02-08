@@ -8,26 +8,26 @@ import (
 	"sync"
 	"time"
 
-	"novel-study/backend/internal/ai/agents"
-	"novel-study/backend/internal/ai/rag"
-	"novel-study/backend/internal/ai/tools"
-	"novel-study/backend/internal/config"
-	"novel-study/backend/internal/repository"
+	"github.com/zibianqu/novel-study/internal/ai/agents"
+	"github.com/zibianqu/novel-study/internal/ai/rag"
+	"github.com/zibianqu/novel-study/internal/ai/tools"
+	"github.com/zibianqu/novel-study/internal/config"
+	"github.com/zibianqu/novel-study/internal/repository"
 )
 
 // Engine AI引擎
 type Engine struct {
-	config         *config.Config
-	agents         map[string]Agent
-	agentsByID     map[int]Agent // Agent ID 索引
-	apiKey         string
-	mu             sync.RWMutex // 保护并发访问
-	toolRegistry   *tools.ToolRegistry
-	retriever      *rag.Retriever
-	projectRepo    *repository.ProjectRepository
-	chapterRepo    *repository.ChapterRepository
-	storylineRepo  *repository.StorylineRepository
-	neo4jRepo      *repository.Neo4jRepository
+	config        *config.Config
+	agents        map[string]Agent
+	agentsByID    map[int]Agent // Agent ID 索引
+	apiKey        string
+	mu            sync.RWMutex // 保护并发访问
+	toolRegistry  *tools.ToolRegistry
+	retriever     *rag.Retriever
+	projectRepo   *repository.ProjectRepository
+	chapterRepo   *repository.ChapterRepository
+	storylineRepo *repository.StorylineRepository
+	neo4jRepo     *repository.Neo4jRepository
 }
 
 // NewEngine 创建新的AI引擎

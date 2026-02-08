@@ -1,8 +1,8 @@
 package agents
 
 import (
-	"novel-study/backend/internal/ai"
-	"novel-study/backend/internal/ai/tools"
+	"github.com/zibianqu/novel-study/internal/ai"
+	"github.com/zibianqu/novel-study/internal/ai/tools"
 )
 
 // PlotlineAgent Agent 6: 剧情线掌控者

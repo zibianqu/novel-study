@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"novel-study/backend/internal/repository"
+	"github.com/zibianqu/novel-study/internal/repository"
 
 	"github.com/gin-gonic/gin"
 )

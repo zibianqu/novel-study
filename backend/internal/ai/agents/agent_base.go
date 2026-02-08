@@ -8,8 +8,8 @@ import (
 	"math"
 	"time"
 
-	"novel-study/backend/internal/ai"
-	"novel-study/backend/internal/ai/tools"
+	"github.com/zibianqu/novel-study/internal/ai"
+	"github.com/zibianqu/novel-study/internal/ai/tools"
 )
 
 // BaseAgent 基础Agent实现

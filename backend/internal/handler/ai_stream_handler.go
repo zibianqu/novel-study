@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"novel-study/backend/internal/ai"
+	"github.com/zibianqu/novel-study/internal/ai"
 
 	"github.com/gin-gonic/gin"
 )

@@ -22,8 +22,8 @@
 
 ```go
 import (
-    "novel-study/backend/internal/ai"
-    "novel-study/backend/internal/ai/tools"  // 新增
+    "github.com/zibianqu/novel-study/internal/ai"
+    "github.com/zibianqu/novel-study/internal/ai/tools"  // 新增
 )
 ```
 
@@ -159,8 +159,8 @@ func NewNarratorAgent(apiKey string) *NarratorAgent {
 package agents
 
 import (
-	"novel-study/backend/internal/ai"
-	"novel-study/backend/internal/ai/tools"
+	"github.com/zibianqu/novel-study/internal/ai"
+	"github.com/zibianqu/novel-study/internal/ai/tools"
 )
 
 type NarratorAgent struct {

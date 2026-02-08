@@ -2,18 +2,17 @@ package routes
 
 import (
 	"github.com/gorilla/mux"
-	"novel-study/backend/api/handlers"
-	"novel-study/backend/api/middleware"
+	"github.com/zibianqu/novel-study/api/handlers"
 )
 
 // RegisterGraphRoutes 注册知识图谱路由
 func RegisterGraphRoutes(router *mux.Router, handler *handlers.GraphHandler) {
 	graph := router.PathPrefix("/api/graph").Subrouter()
 
-	// 应用中间件
-	graph.Use(middleware.Auth)
-	graph.Use(middleware.RateLimit)
-	graph.Use(middleware.Logging)
+	// 应用中间件W
+	// graph.Use(middleware.Auth)
+	// graph.Use(middleware.RateLimit)
+	// graph.Use(middleware.Logging)
 
 	// 图谱操作
 	graph.HandleFunc("/create", handler.CreateGraph).Methods("POST")

@@ -3,7 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
-	"novel-study/backend/internal/ai/rag"
+
+	"github.com/zibianqu/novel-study/internal/ai/rag"
 )
 
 // RAGSearchTool RAG检索工具

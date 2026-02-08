@@ -3,7 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
-	"novel-study/backend/internal/repository"
+
+	"github.com/zibianqu/novel-study/internal/repository"
 )
 
 // GetStorylineStatusTool 获取三线状态工具

@@ -1,4 +1,4 @@
-// API 调用封装
+// API 调用封装 - 增强版
 const API = {
     // 获取 Token
     getToken() {
@@ -11,7 +11,7 @@ const API = {
         return userStr ? JSON.parse(userStr) : null;
     },
 
-    // 通用请求方法
+    // 通用请求方法 - 增强版
     async request(url, options = {}) {
         const token = this.getToken();
         const headers = {
@@ -19,6 +19,12 @@ const API = {
             ...(token && { 'Authorization': `Bearer ${token}` }),
             ...options.headers
         };
+
+        // 是否显示加载
+        const showLoading = options.showLoading !== false;
+        if (showLoading && typeof LoadingManager !== 'undefined') {
+            LoadingManager.show();
+        }
 
         try {
             const response = await fetch(`${API_CONFIG.BASE_URL}${url}`, {
@@ -31,8 +37,11 @@ const API = {
                 // Token 过期，跳转登录
                 localStorage.removeItem(STORAGE_KEYS.TOKEN);
                 localStorage.removeItem(STORAGE_KEYS.USER_INFO);
-                location.href = 'index.html';
-                throw new Error('Unauthorized');
+                if (typeof ErrorHandler !== 'undefined') {
+                    ErrorHandler.showError('登录已过期，请重新登录');
+                }
+                setTimeout(() => location.href = 'index.html', 1500);
+                throw { status: 401, error: 'Unauthorized' };
             }
 
             // 解析 JSON
@@ -40,40 +49,71 @@ const API = {
 
             // 检查是否有错误
             if (!response.ok) {
-                throw { status: response.status, error: data.error || 'Request failed', data };
+                const error = { 
+                    status: response.status, 
+                    error: data.error || 'Request failed', 
+                    data 
+                };
+                
+                // 自动显示错误
+                if (typeof ErrorHandler !== 'undefined') {
+                    ErrorHandler.handleAPIError(error);
+                }
+                
+                throw error;
             }
 
             return data;
         } catch (error) {
             console.error('API Error:', error);
+            
+            // 如果是网络错误
+            if (error.name === 'TypeError' || error.message === 'Failed to fetch') {
+                const netError = { 
+                    status: 0, 
+                    error: '网络连接失败，请检查网络' 
+                };
+                if (typeof ErrorHandler !== 'undefined') {
+                    ErrorHandler.handleAPIError(netError);
+                }
+                throw netError;
+            }
+            
             throw error;
+        } finally {
+            // 隐藏加载
+            if (showLoading && typeof LoadingManager !== 'undefined') {
+                LoadingManager.hide();
+            }
         }
     },
 
     // GET 请求
-    get(url) {
-        return this.request(url, { method: 'GET' });
+    get(url, options = {}) {
+        return this.request(url, { ...options, method: 'GET' });
     },
 
     // POST 请求
-    post(url, data) {
+    post(url, data, options = {}) {
         return this.request(url, {
+            ...options,
             method: 'POST',
             body: JSON.stringify(data)
         });
     },
 
     // PUT 请求
-    put(url, data) {
+    put(url, data, options = {}) {
         return this.request(url, {
+            ...options,
             method: 'PUT',
             body: JSON.stringify(data)
         });
     },
 
     // DELETE 请求
-    delete(url) {
-        return this.request(url, { method: 'DELETE' });
+    delete(url, options = {}) {
+        return this.request(url, { ...options, method: 'DELETE' });
     },
 
     // 项目 API

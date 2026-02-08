@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
@@ -80,8 +81,10 @@ func main() {
 	}
 	router := gin.Default()
 
-	// CORS 中间件
-	router.Use(middleware.CORS())
+	// ✨ 全局中间件 - P1 修复
+	router.Use(middleware.CORS())              // CORS
+	router.Use(middleware.TimeoutByPath())     // 超时控制
+	router.Use(middleware.RateLimitByPath())   // 限流
 
 	// 静态文件服务
 	router.Static("/css", "./frontend/css")
@@ -165,6 +168,7 @@ func main() {
 	log.Printf("🎬 7 个核心 Agent 已就绪")
 	log.Printf("🧠 RAG 知识库系统已启用")
 	log.Printf("🕸️ Neo4j 知识图谱已连接")
+	log.Printf("✅ CORS / 超时 / 限流 已启用")
 	log.Printf("🔗 前端: http://localhost:%s", port)
 	log.Printf("📚 API: http://localhost:%s/api/v1", port)
 	log.Printf("❤️ Health: http://localhost:%s/api/v1/health", port)

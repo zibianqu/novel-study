@@ -7,110 +7,138 @@ import (
 	"strings"
 )
 
-// Entity 实体
-type Entity struct {
-	ID          string
-	Name        string
-	Type        NodeType
-	Mentions    int     // 提及次数
-	Confidence  float64 // 置信度
-	Context     string  // 上下文
-	Chapter     int     // 首次出现章节
-	Attributes  map[string]string
-}
-
 // EntityExtractor 实体提取器
 type EntityExtractor struct {
-	characterPatterns []*regexp.Regexp
-	locationPatterns  []*regexp.Regexp
-	eventPatterns     []*regexp.Regexp
-	itemPatterns      []*regexp.Regexp
-	conceptPatterns   []*regexp.Regexp
+	patterns map[NodeType]*EntityPattern
+}
+
+// EntityPattern 实体识别模式
+type EntityPattern struct {
+	Keywords   []string          // 关键词
+	Patterns   []*regexp.Regexp  // 正则表达式
+	Extractor  func(string) []string // 自定义提取器
+}
+
+// ExtractedEntity 提取的实体
+type ExtractedEntity struct {
+	Type       NodeType
+	Name       string
+	Context    string
+	Confidence float64
+	Position   int // 在文本中的位置
+	Properties map[string]interface{}
 }
 
 // NewEntityExtractor 创建实体提取器
 func NewEntityExtractor() *EntityExtractor {
 	return &EntityExtractor{
-		characterPatterns: compileCharacterPatterns(),
-		locationPatterns:  compileLocationPatterns(),
-		eventPatterns:     compileEventPatterns(),
-		itemPatterns:      compileItemPatterns(),
-		conceptPatterns:   compileConceptPatterns(),
+		patterns: make(map[NodeType]*EntityPattern),
 	}
 }
 
-// Extract 从文本中提取实体
-func (e *EntityExtractor) Extract(ctx context.Context, text string, chapter int) ([]*Entity, error) {
-	entities := make([]*Entity, 0)
+// Initialize 初始化提取模式
+func (e *EntityExtractor) Initialize() {
+	// 人物识别模式
+	e.patterns[NodeTypeCharacter] = &EntityPattern{
+		Keywords: []string{"人", "他", "她", "师傅", "弟子", "道友"},
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`[\p{Han}]{2,4}(说|道|想|笑|叹)`),
+			regexp.MustCompile(`(少年|老者|青年|女子|男子)[\p{Han}]{0,2}`),
+		},
+	}
 
-	// 1. 提取人物
-	characters := e.extractCharacters(text, chapter)
-	entities = append(entities, characters...)
+	// 地点识别模式
+	e.patterns[NodeTypeLocation] = &EntityPattern{
+		Keywords: []string{"山", "城", "宗", "殿", "阁", "谷", "峰", "岛"},
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`[\p{Han}]{2,6}(山|城|宗|殿|阁|谷|峰|岛)`),
+			regexp.MustCompile(`(东|西|南|北|中)[\p{Han}]{1,3}(域|州|郡)`),
+		},
+	}
 
-	// 2. 提取地点
-	locations := e.extractLocations(text, chapter)
-	entities = append(entities, locations...)
+	// 事件识别模式
+	e.patterns[NodeTypeEvent] = &EntityPattern{
+		Keywords: []string{"战", "会", "典", "劫", "变"},
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`[\p{Han}]{2,6}(之战|大战|之会|大会)`),
+		},
+	}
 
-	// 3. 提取事件
-	events := e.extractEvents(text, chapter)
-	entities = append(entities, events...)
+	// 物品识别模式
+	e.patterns[NodeTypeItem] = &EntityPattern{
+		Keywords: []string{"剑", "刀", "丹", "符", "宝", "器"},
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`[\p{Han}]{2,6}(剑|刀|枪|斧|鼎|珠|玉)`),
+		},
+	}
 
-	// 4. 提取物品
-	items := e.extractItems(text, chapter)
-	entities = append(entities, items...)
+	// 概念识别模式
+	e.patterns[NodeTypeConcept] = &EntityPattern{
+		Keywords: []string{"功", "法", "术", "道", "诀"},
+		Patterns: []*regexp.Regexp{
+			regexp.MustCompile(`[\p{Han}]{2,6}(功|法|术|诀)`),
+		},
+	}
+}
 
-	// 5. 提取概念
-	concepts := e.extractConcepts(text, chapter)
-	entities = append(entities, concepts...)
+// Extract 从文本提取实体
+func (e *EntityExtractor) Extract(
+	ctx context.Context,
+	text string,
+) ([]*ExtractedEntity, error) {
+	if len(e.patterns) == 0 {
+		e.Initialize()
+	}
 
-	// 去重和合并
+	entities := make([]*ExtractedEntity, 0)
+
+	// 对每种实体类型进行提取
+	for nodeType, pattern := range e.patterns {
+		extracted := e.extractByType(text, nodeType, pattern)
+		entities = append(entities, extracted...)
+	}
+
+	// 去重
 	entities = e.deduplicateEntities(entities)
+
+	// 排序（按置信度）
+	entities = e.sortByConfidence(entities)
 
 	return entities, nil
 }
 
-// extractCharacters 提取人物
-func (e *EntityExtractor) extractCharacters(text string, chapter int) []*Entity {
-	entities := make([]*Entity, 0)
+// extractByType 按类型提取
+func (e *EntityExtractor) extractByType(
+	text string,
+	nodeType NodeType,
+	pattern *EntityPattern,
+) []*ExtractedEntity {
+	entities := make([]*ExtractedEntity, 0)
 
-	// 关键词匹配
-	characterKeywords := []string{
-		"主角", "男主", "女主", "师父", "师兄", "师姐", "弟子",
-		"长老", "宗主", "掌门", "前辈", "道友",
-	}
-
-	for _, keyword := range characterKeywords {
-		if strings.Contains(text, keyword) {
-			entity := &Entity{
-				ID:         generateEntityID(NodeTypeCharacter, keyword),
-				Name:       keyword,
-				Type:       NodeTypeCharacter,
-				Mentions:   strings.Count(text, keyword),
-				Confidence: 0.7,
-				Chapter:    chapter,
-				Attributes: make(map[string]string),
+	// 使用正则表达式提取
+	for _, re := range pattern.Patterns {
+		matches := re.FindAllStringIndex(text, -1)
+		for _, match := range matches {
+			name := text[match[0]:match[1]]
+			
+			// 过滤太短的名称
+			if len([]rune(name)) < 2 {
+				continue
 			}
-			entities = append(entities, entity)
-		}
-	}
 
-	// 人名模式匹配（简化版）
-	// 匹配类似 "张三", "李四" 等两字或三字人名
-	namePattern := regexp.MustCompile(`[\p{Han}]{2,3}(?:说道|说|道|想|笑|怒|叹)`)
-	matches := namePattern.FindAllString(text, -1)
-
-	for _, match := range matches {
-		name := strings.TrimRight(match, "说道想笑怒叹")
-		if len(name) >= 2 && len(name) <= 3 {
-			entity := &Entity{
-				ID:         generateEntityID(NodeTypeCharacter, name),
+			entity := &ExtractedEntity{
+				Type:       nodeType,
 				Name:       name,
-				Type:       NodeTypeCharacter,
-				Mentions:   strings.Count(text, name),
-				Confidence: 0.8,
-				Chapter:    chapter,
-				Attributes: make(map[string]string),
+				Position:   match[0],
+				Confidence: e.calculateConfidence(name, nodeType),
+				Properties: make(map[string]interface{}),
 			}
+
+			// 提取上下文
+			contextStart := max(0, match[0]-20)
+			contextEnd := min(len(text), match[1]+20)
+			entity.Context = text[contextStart:contextEnd]
+
 			entities = append(entities, entity)
 		}
 	}
@@ -118,194 +146,164 @@ func (e *EntityExtractor) extractCharacters(text string, chapter int) []*Entity 
 	return entities
 }
 
-// extractLocations 提取地点
-func (e *EntityExtractor) extractLocations(text string, chapter int) []*Entity {
-	entities := make([]*Entity, 0)
+// calculateConfidence 计算置信度
+func (e *EntityExtractor) calculateConfidence(name string, nodeType NodeType) float64 {
+	confidence := 0.5 // 基础置信度
 
-	locationKeywords := []string{
-		"宗门", "门派", "山峰", "大殿", "洞府", "密室",
-		"城市", "村庄", "森林", "山脉", "江湖",
+	// 根据长度调整
+	runes := []rune(name)
+	if len(runes) >= 3 && len(runes) <= 5 {
+		confidence += 0.2
 	}
 
-	for _, keyword := range locationKeywords {
-		if strings.Contains(text, keyword) {
-			entity := &Entity{
-				ID:         generateEntityID(NodeTypeLocation, keyword),
-				Name:       keyword,
-				Type:       NodeTypeLocation,
-				Mentions:   strings.Count(text, keyword),
-				Confidence: 0.7,
-				Chapter:    chapter,
-				Attributes: make(map[string]string),
+	// 根据类型特征调整
+	pattern := e.patterns[nodeType]
+	if pattern != nil {
+		for _, keyword := range pattern.Keywords {
+			if strings.Contains(name, keyword) {
+				confidence += 0.1
+				break
 			}
-			entities = append(entities, entity)
 		}
 	}
 
-	// 地点模式匹配
-	// 匹配 "XXX山", "XXX宗", "XXX城" 等
-	locPattern := regexp.MustCompile(`[\p{Han}]{2,5}[山宗城峰谷洞府殿]`)
-	matches := locPattern.FindAllString(text, -1)
-
-	for _, match := range matches {
-		entity := &Entity{
-			ID:         generateEntityID(NodeTypeLocation, match),
-			Name:       match,
-			Type:       NodeTypeLocation,
-			Mentions:   strings.Count(text, match),
-			Confidence: 0.75,
-			Chapter:    chapter,
-			Attributes: make(map[string]string),
-		}
-		entities = append(entities, entity)
+	if confidence > 1.0 {
+		confidence = 1.0
 	}
 
-	return entities
+	return confidence
 }
 
-// extractEvents 提取事件
-func (e *EntityExtractor) extractEvents(text string, chapter int) []*Entity {
-	entities := make([]*Entity, 0)
-
-	eventKeywords := []string{
-		"战斗", "比武", "决斗", "突破", "修炼",
-		"会议", "宴会", "拜师", "结盟",
-	}
-
-	for _, keyword := range eventKeywords {
-		if strings.Contains(text, keyword) {
-			entity := &Entity{
-				ID:         generateEntityID(NodeTypeEvent, keyword),
-				Name:       keyword,
-				Type:       NodeTypeEvent,
-				Mentions:   strings.Count(text, keyword),
-				Confidence: 0.6,
-				Chapter:    chapter,
-				Attributes: map[string]string{
-					"event_type": keyword,
-				},
-			}
-			entities = append(entities, entity)
-		}
-	}
-
-	return entities
-}
-
-// extractItems 提取物品
-func (e *EntityExtractor) extractItems(text string, chapter int) []*Entity {
-	entities := make([]*Entity, 0)
-
-	itemKeywords := []string{
-		"宝剑", "法宝", "丹药", "灵石", "功法",
-		"宝物", "神器", "令牌", "玉佩",
-	}
-
-	for _, keyword := range itemKeywords {
-		if strings.Contains(text, keyword) {
-			entity := &Entity{
-				ID:         generateEntityID(NodeTypeItem, keyword),
-				Name:       keyword,
-				Type:       NodeTypeItem,
-				Mentions:   strings.Count(text, keyword),
-				Confidence: 0.65,
-				Chapter:    chapter,
-				Attributes: make(map[string]string),
-			}
-			entities = append(entities, entity)
-		}
-	}
-
-	return entities
-}
-
-// extractConcepts 提取概念
-func (e *EntityExtractor) extractConcepts(text string, chapter int) []*Entity {
-	entities := make([]*Entity, 0)
-
-	conceptKeywords := []string{
-		"剑法", "心法", "武学", "功夫", "阵法",
-		"境界", "修为", "神通", "术法",
-	}
-
-	for _, keyword := range conceptKeywords {
-		if strings.Contains(text, keyword) {
-			entity := &Entity{
-				ID:         generateEntityID(NodeTypeConcept, keyword),
-				Name:       keyword,
-				Type:       NodeTypeConcept,
-				Mentions:   strings.Count(text, keyword),
-				Confidence: 0.6,
-				Chapter:    chapter,
-				Attributes: make(map[string]string),
-			}
-			entities = append(entities, entity)
-		}
-	}
-
-	return entities
-}
-
-// deduplicateEntities 去重实体
-func (e *EntityExtractor) deduplicateEntities(entities []*Entity) []*Entity {
-	seen := make(map[string]*Entity)
+// deduplicateEntities 去重
+func (e *EntityExtractor) deduplicateEntities(entities []*ExtractedEntity) []*ExtractedEntity {
+	seen := make(map[string]bool)
+	result := make([]*ExtractedEntity, 0)
 
 	for _, entity := range entities {
-		key := string(entity.Type) + ":" + entity.Name
-		if existing, ok := seen[key]; ok {
-			// 合并提及次数
-			existing.Mentions += entity.Mentions
-			// 提高置信度
-			if existing.Confidence < 0.9 {
-				existing.Confidence += 0.1
-			}
-		} else {
-			seen[key] = entity
+		key := fmt.Sprintf("%s:%s", entity.Type, entity.Name)
+		if !seen[key] {
+			seen[key] = true
+			result = append(result, entity)
 		}
-	}
-
-	result := make([]*Entity, 0, len(seen))
-	for _, entity := range seen {
-		result = append(result, entity)
 	}
 
 	return result
 }
 
-// 编译正则表达式模式
-
-func compileCharacterPatterns() []*regexp.Regexp {
-	return []*regexp.Regexp{
-		regexp.MustCompile(`[\p{Han}]{2,3}(?:说道|说|道|想|笑|怒|叹)`),
-		regexp.MustCompile(`(?:师父|师兄|师姐|师弟|师妹)`),
+// sortByConfidence 按置信度排序
+func (e *EntityExtractor) sortByConfidence(entities []*ExtractedEntity) []*ExtractedEntity {
+	// 简单冒泡排序
+	n := len(entities)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			if entities[j].Confidence < entities[j+1].Confidence {
+				entities[j], entities[j+1] = entities[j+1], entities[j]
+			}
+		}
 	}
+	return entities
 }
 
-func compileLocationPatterns() []*regexp.Regexp {
-	return []*regexp.Regexp{
-		regexp.MustCompile(`[\p{Han}]{2,5}[山宗城峰谷洞府殿]`),
+// ExtractCharacters 提取人物
+func (e *EntityExtractor) ExtractCharacters(
+	ctx context.Context,
+	text string,
+) ([]*Character, error) {
+	entities, err := e.Extract(ctx, text)
+	if err != nil {
+		return nil, err
 	}
+
+	characters := make([]*Character, 0)
+	for _, entity := range entities {
+		if entity.Type == NodeTypeCharacter {
+			character := &Character{
+				Node: Node{
+					ID:   generateID("char"),
+					Type: NodeTypeCharacter,
+					Name: entity.Name,
+					Description: entity.Context,
+				},
+				Role: e.inferCharacterRole(entity),
+			}
+			characters = append(characters, character)
+		}
+	}
+
+	return characters, nil
 }
 
-func compileEventPatterns() []*regexp.Regexp {
-	return []*regexp.Regexp{
-		regexp.MustCompile(`(?:战斗|比武|决斗)`),
+// ExtractLocations 提取地点
+func (e *EntityExtractor) ExtractLocations(
+	ctx context.Context,
+	text string,
+) ([]*Location, error) {
+	entities, err := e.Extract(ctx, text)
+	if err != nil {
+		return nil, err
 	}
+
+	locations := make([]*Location, 0)
+	for _, entity := range entities {
+		if entity.Type == NodeTypeLocation {
+			location := &Location{
+				Node: Node{
+					ID:   generateID("loc"),
+					Type: NodeTypeLocation,
+					Name: entity.Name,
+					Description: entity.Context,
+				},
+				LocationType: e.inferLocationType(entity.Name),
+			}
+			locations = append(locations, location)
+		}
+	}
+
+	return locations, nil
 }
 
-func compileItemPatterns() []*regexp.Regexp {
-	return []*regexp.Regexp{
-		regexp.MustCompile(`[\p{Han}]{2,4}(?:剑|刀|枪|法宝|丹药)`),
+// inferCharacterRole 推断角色类型
+func (e *EntityExtractor) inferCharacterRole(entity *ExtractedEntity) string {
+	// 简化实现
+	if entity.Confidence > 0.8 {
+		return "protagonist"
+	} else if entity.Confidence > 0.6 {
+		return "supporting"
 	}
+	return "minor"
 }
 
-func compileConceptPatterns() []*regexp.Regexp {
-	return []*regexp.Regexp{
-		regexp.MustCompile(`[\p{Han}]{2,4}(?:心法|剑法|功法|神通)`),
+// inferLocationType 推断地点类型
+func (e *EntityExtractor) inferLocationType(name string) string {
+	if strings.Contains(name, "宗") {
+		return "sect"
+	} else if strings.Contains(name, "城") {
+		return "city"
+	} else if strings.Contains(name, "山") {
+		return "mountain"
 	}
+	return "unknown"
 }
 
-// generateEntityID 生成实体ID
-func generateEntityID(nodeType NodeType, name string) string {
-	return fmt.Sprintf("%s_%s", strings.ToLower(string(nodeType)), name)
+// 辅助函数
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+var entityIDCounter uint64
+
+func generateID(prefix string) string {
+	entityIDCounter++
+	return fmt.Sprintf("%s_%d", prefix, entityIDCounter)
 }

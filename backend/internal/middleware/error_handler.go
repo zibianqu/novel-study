@@ -12,11 +12,16 @@ type ErrorResponse struct {
 	Details map[string]interface{} `json:"details,omitempty"`
 }
 
+// ErrorHandler 统一错误处理
 func ErrorHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
+
+		// 检查是否有错误
 		if len(c.Errors) > 0 {
 			err := c.Errors.Last()
+			
+			// 根据错误类型返回不同的状态码
 			switch err.Type {
 			case gin.ErrorTypeBind:
 				c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -38,6 +43,7 @@ func ErrorHandler() gin.HandlerFunc {
 	}
 }
 
+// RespondError 统一错误响应
 func RespondError(c *gin.Context, status int, code, message string) {
 	c.JSON(status, ErrorResponse{
 		Error: message,
@@ -45,6 +51,7 @@ func RespondError(c *gin.Context, status int, code, message string) {
 	})
 }
 
+// RespondErrorWithDetails 带详情的错误响应
 func RespondErrorWithDetails(c *gin.Context, status int, code, message string, details map[string]interface{}) {
 	c.JSON(status, ErrorResponse{
 		Error:   message,

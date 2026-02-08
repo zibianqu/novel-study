@@ -2,75 +2,89 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/zibianqu/novel-study/internal/config"
 )
 
 type RedisClient struct {
 	client *redis.Client
 }
 
-func NewRedisClient(cfg *config.Config) (*RedisClient, error) {
+func NewRedisClient(host, port, password string, db int) (*RedisClient, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:         cfg.RedisHost + ":" + cfg.RedisPort,
-		Password:     cfg.RedisPassword,
-		DB:           cfg.RedisDB,
-		PoolSize:     cfg.RedisPoolSize,
-		MinIdleConns: 5,
-		MaxRetries:   3,
-		DialTimeout:  5 * time.Second,
-		ReadTimeout:  3 * time.Second,
-		WriteTimeout: 3 * time.Second,
+		Addr:     fmt.Sprintf("%s:%s", host, port),
+		Password: password,
+		DB:       db,
+		PoolSize: 10,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("redis connection failed: %w", err)
 	}
 
 	return &RedisClient{client: client}, nil
 }
 
-func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
-	return r.client.Get(ctx, key).Result()
-}
-
+// Set 设置键值
 func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return r.client.Set(ctx, key, value, expiration).Err()
 }
 
-func (r *RedisClient) Del(ctx context.Context, keys ...string) error {
+// Get 获取值
+func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
+	return r.client.Get(ctx, key).Result()
+}
+
+// Delete 删除键
+func (r *RedisClient) Delete(ctx context.Context, keys ...string) error {
 	return r.client.Del(ctx, keys...).Err()
 }
 
-func (r *RedisClient) Exists(ctx context.Context, keys ...string) (int64, error) {
-	return r.client.Exists(ctx, keys...).Result()
+// Exists 检查键是否存在
+func (r *RedisClient) Exists(ctx context.Context, key string) (bool, error) {
+	result, err := r.client.Exists(ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+	return result > 0, nil
 }
 
-func (r *RedisClient) Expire(ctx context.Context, key string, expiration time.Duration) error {
-	return r.client.Expire(ctx, key, expiration).Err()
-}
-
-func (r *RedisClient) Incr(ctx context.Context, key string) (int64, error) {
-	return r.client.Incr(ctx, key).Result()
-}
-
+// SetNX 设置键值（仅当键不存在时）
 func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
 	return r.client.SetNX(ctx, key, value, expiration).Result()
 }
 
-func (r *RedisClient) HGet(ctx context.Context, key, field string) (string, error) {
-	return r.client.HGet(ctx, key, field).Result()
+// Increment 增加计数器
+func (r *RedisClient) Increment(ctx context.Context, key string) (int64, error) {
+	return r.client.Incr(ctx, key).Result()
 }
 
-func (r *RedisClient) HSet(ctx context.Context, key string, values ...interface{}) error {
-	return r.client.HSet(ctx, key, values...).Err()
+// Expire 设置过期时间
+func (r *RedisClient) Expire(ctx context.Context, key string, expiration time.Duration) error {
+	return r.client.Expire(ctx, key, expiration).Err()
 }
 
+// Keys 获取匹配的所有键
+func (r *RedisClient) Keys(ctx context.Context, pattern string) ([]string, error) {
+	return r.client.Keys(ctx, pattern).Result()
+}
+
+// FlushDB 清空当前数据库
+func (r *RedisClient) FlushDB(ctx context.Context) error {
+	return r.client.FlushDB(ctx).Err()
+}
+
+// Close 关闭连接
 func (r *RedisClient) Close() error {
 	return r.client.Close()
+}
+
+// Pipeline 执行管道命令
+func (r *RedisClient) Pipeline() redis.Pipeliner {
+	return r.client.Pipeline()
 }

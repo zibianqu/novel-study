@@ -1,7 +1,8 @@
 package agents
 
 import (
-	"github.com/zibianqu/novel-study/internal/ai"
+	"novel-study/backend/internal/ai"
+	"novel-study/backend/internal/ai/tools"
 )
 
 // NarratorAgent Agent 1: 旁白叙述者
@@ -10,7 +11,7 @@ type NarratorAgent struct {
 }
 
 // NewNarratorAgent 创建旁白叙述者Agent
-func NewNarratorAgent(apiKey string) *NarratorAgent {
+func NewNarratorAgent(apiKey string, toolRegistry *tools.ToolRegistry) *NarratorAgent {
 	config := &ai.AgentConfig{
 		AgentKey: "agent_1_narrator",
 		Name:     "旁白叙述者 (Narrator)",
@@ -32,10 +33,14 @@ func NewNarratorAgent(apiKey string) *NarratorAgent {
 		Model:       "gpt-4o",
 		Temperature: 0.8,
 		MaxTokens:   4096,
-		Tools:       []string{"rag_search", "query_neo4j"},
+		Tools: []string{
+			"rag_search",
+			"query_neo4j",
+			"get_chapter_content",
+		},
 	}
 
 	return &NarratorAgent{
-		BaseAgent: NewBaseAgent(config, apiKey),
+		BaseAgent: NewBaseAgent(config, apiKey, toolRegistry, 1),
 	}
 }

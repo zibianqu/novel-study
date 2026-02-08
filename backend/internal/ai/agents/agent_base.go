@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/zibianqu/novel-study/internal/ai"
@@ -63,8 +64,8 @@ func (a *BaseAgent) Execute(ctx context.Context, req *ai.AgentRequest) (*ai.Agen
 
 	log.Printf("[%s] Executing request: %s", a.config.Name, req.Prompt)
 
-	// 调用 OpenAI API
-	content, tokensUsed, err := a.callOpenAI(ctx, messages)
+	// ✨ 调用 OpenAI API (带重试)
+	content, tokensUsed, err := a.callOpenAIWithRetry(ctx, messages, 3)
 	if err != nil {
 		return nil, fmt.Errorf("OpenAI API call failed: %w", err)
 	}
@@ -104,6 +105,38 @@ func (a *BaseAgent) ExecuteStream(ctx context.Context, req *ai.AgentRequest, cal
 	return a.callOpenAIStream(ctx, messages, callback)
 }
 
+// callOpenAIWithRetry 带重试的 OpenAI API 调用
+func (a *BaseAgent) callOpenAIWithRetry(ctx context.Context, messages []ai.ChatMessage, maxRetries int) (string, int, error) {
+	var lastErr error
+
+	for i := 0; i < maxRetries; i++ {
+		content, tokensUsed, err := a.callOpenAI(ctx, messages)
+		if err == nil {
+			return content, tokensUsed, nil
+		}
+
+		lastErr = err
+		log.Printf("[%s] API call failed (attempt %d/%d): %v", a.config.Name, i+1, maxRetries, err)
+
+		// 最后一次失败不等待
+		if i < maxRetries-1 {
+			// 指数退避: 1s, 2s, 4s
+			waitTime := time.Duration(math.Pow(2, float64(i))) * time.Second
+			log.Printf("[%s] Retrying in %v...", a.config.Name, waitTime)
+			
+			select {
+			case <-time.After(waitTime):
+				// 继续重试
+			case <-ctx.Done():
+				// Context 取消
+				return "", 0, ctx.Err()
+			}
+		}
+	}
+
+	return "", 0, fmt.Errorf("all retries failed: %w", lastErr)
+}
+
 // callOpenAI 调用OpenAI API
 func (a *BaseAgent) callOpenAI(ctx context.Context, messages []ai.ChatMessage) (string, int, error) {
 	// TODO: 实际集成 OpenAI API
@@ -129,6 +162,13 @@ func (a *BaseAgent) callOpenAIStream(ctx context.Context, messages []ai.ChatMess
 	words := []rune(content)
 	chunkSize := 10
 	for i := 0; i < len(words); i += chunkSize {
+		// 检查 context 是否取消
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		end := i + chunkSize
 		if end > len(words) {
 			end = len(words)

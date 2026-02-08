@@ -38,7 +38,7 @@ func (h *AIHandler) Chat(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ChatStream 流式对话 (SSE)
+// ChatStream 流式对话 (SSE) - 修复版
 func (h *AIHandler) ChatStream(c *gin.Context) {
 	userID := c.GetInt("user_id")
 
@@ -47,12 +47,24 @@ func (h *AIHandler) ChatStream(c *gin.Context) {
 		Message   string `json:"message" binding:"required"`
 	}
 
+	// ⚠️ 重要！在设置 SSE 头之前验证参数
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误: " + err.Error()})
 		return
 	}
 
-	// 设置SSE头
+	// 额外验证
+	if req.Message == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "消息不能为空"})
+		return
+	}
+
+	if req.ProjectID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的项目 ID"})
+		return
+	}
+
+	// ✅ 参数验证通过，现在可以设置 SSE 头
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -60,7 +72,8 @@ func (h *AIHandler) ChatStream(c *gin.Context) {
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming not supported"})
+		// 这个错误不能用 JSON 返回，因为头已经发送
+		c.SSEvent("error", "Streaming not supported")
 		return
 	}
 
@@ -73,10 +86,12 @@ func (h *AIHandler) ChatStream(c *gin.Context) {
 	err := h.service.ChatStream(c.Request.Context(), userID, req.ProjectID, req.Message, callback)
 	if err != nil {
 		c.SSEvent("error", err.Error())
+		flusher.Flush()
 		return
 	}
 
 	c.SSEvent("done", "")
+	flusher.Flush()
 }
 
 // GenerateChapter 生成章节

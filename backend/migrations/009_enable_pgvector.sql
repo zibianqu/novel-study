@@ -1,91 +1,75 @@
--- 启用pgvector扩展
--- 执行时间: 2026-02-08
+-- NovelForge AI - 启用 pgvector 扫展
+-- 创建时间: 2026-02-08
+-- 目的: 优化向量搜索性能
+
+-- ====================================
+-- 启用 pgvector 扫展
+-- ====================================
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
-        RAISE EXCEPTION 'pgvector extension not installed';
-    END IF;
-END $$;
+-- ====================================
+-- 创建向量 Embedding 表
+-- ====================================
 
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'content_embeddings' 
-        AND column_name = 'embedding' 
-        AND data_type = 'USER-DEFINED'
-    ) THEN
-        ALTER TABLE content_embeddings ALTER COLUMN embedding TYPE vector(1536) USING embedding::vector(1536);
-    END IF;
-    
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'agent_knowledge_embeddings' 
-        AND column_name = 'embedding' 
-        AND data_type = 'USER-DEFINED'
-    ) THEN
-        ALTER TABLE agent_knowledge_embeddings ALTER COLUMN embedding TYPE vector(1536) USING embedding::vector(1536);
-    END IF;
-END $$;
+-- 内容 Embedding 表
+CREATE TABLE IF NOT EXISTS content_embeddings (
+    id SERIAL PRIMARY KEY,
+    content_id INTEGER NOT NULL,
+    content_type VARCHAR(50) NOT NULL, -- 'chapter', 'knowledge', etc
+    embedding vector(1536) NOT NULL,   -- OpenAI ada-002
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-ALTER TABLE content_embeddings ADD CONSTRAINT check_embedding_dim 
-    CHECK (vector_dims(embedding) = 1536);
-    
-ALTER TABLE agent_knowledge_embeddings ADD CONSTRAINT check_agent_embedding_dim 
-    CHECK (vector_dims(embedding) = 1536);
+-- Agent 知识 Embedding 表
+CREATE TABLE IF NOT EXISTS agent_knowledge_embeddings (
+    id SERIAL PRIMARY KEY,
+    agent_type VARCHAR(50) NOT NULL,
+    knowledge_text TEXT NOT NULL,
+    embedding vector(1536) NOT NULL,
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-CREATE OR REPLACE FUNCTION search_similar_content(
-    query_embedding vector(1536),
-    p_project_id INT,
-    limit_count INT DEFAULT 5
-)
-RETURNS TABLE (
-    id INT,
-    chapter_id INT,
-    chunk_text TEXT,
-    similarity FLOAT
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        ce.id,
-        ce.chapter_id,
-        ce.chunk_text,
-        1 - (ce.embedding <=> query_embedding) as similarity
-    FROM content_embeddings ce
-    WHERE ce.project_id = p_project_id
-    ORDER BY ce.embedding <=> query_embedding
-    LIMIT limit_count;
-END;
-$$ LANGUAGE plpgsql;
+-- ====================================
+-- 创建 HNSW 索引 (高性能向量搜索)
+-- ====================================
 
-CREATE OR REPLACE FUNCTION search_agent_knowledge(
-    query_embedding vector(1536),
-    p_agent_id INT,
-    limit_count INT DEFAULT 3
-)
-RETURNS TABLE (
-    id INT,
-    item_id INT,
-    chunk_text TEXT,
-    similarity FLOAT
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        ake.id,
-        ake.item_id,
-        ake.chunk_text,
-        1 - (ake.embedding <=> query_embedding) as similarity
-    FROM agent_knowledge_embeddings ake
-    WHERE ake.agent_id = p_agent_id
-    ORDER BY ake.embedding <=> query_embedding
-    LIMIT limit_count;
-END;
-$$ LANGUAGE plpgsql;
+-- content_embeddings 表的 HNSW 索引
+CREATE INDEX IF NOT EXISTS content_embeddings_embedding_idx 
+    ON content_embeddings 
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
 
-COMMENT ON FUNCTION search_similar_content IS 'RAG内容相似度搜索';
-COMMENT ON FUNCTION search_agent_knowledge IS 'Agent知识库相似度搜索';
+-- agent_knowledge_embeddings 表的 HNSW 索引
+CREATE INDEX IF NOT EXISTS agent_knowledge_embeddings_embedding_idx 
+    ON agent_knowledge_embeddings 
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
+-- ====================================
+-- 标准索引
+-- ====================================
+
+-- content_id 索引
+CREATE INDEX IF NOT EXISTS idx_content_embeddings_content_id 
+    ON content_embeddings(content_id);
+
+-- content_type 索引
+CREATE INDEX IF NOT EXISTS idx_content_embeddings_type 
+    ON content_embeddings(content_type);
+
+-- agent_type 索引
+CREATE INDEX IF NOT EXISTS idx_agent_knowledge_type 
+    ON agent_knowledge_embeddings(agent_type);
+
+-- ====================================
+-- 分析表
+-- ====================================
+
+ANALYZE content_embeddings;
+ANALYZE agent_knowledge_embeddings;
+
+COMMIT;

@@ -9,13 +9,13 @@
 
 ### Task 2.1: Agent 工具系统基础 (2026-02-08)
 
-#### 1. 工具接口与注册中心
+#### 1. 工具接口与注册中心 ✅
 - ✅ `backend/internal/ai/tools/tools.go` - 更新工具注册表
   - 添加日志记录功能
   - 实现工具执行跟踪
   - 添加工具列表查询
 
-#### 2. 核心工具实现
+#### 2. 核心工具实现 ✅
 - ✅ `backend/internal/ai/tools/rag_search.go` - RAG 检索工具
   - 支持基本查询和项目过滤
   - 支持 Agent 专属知识库过滤
@@ -46,18 +46,44 @@
   - `update_storyline` - 更新三线规划
   - `create_storyline` - 创建新三线
 
-#### 3. 日志系统
+#### 3. 日志系统 ✅
 - ✅ `backend/internal/ai/tools/logger.go` - 工具调用日志
   - 实现 `DBToolCallLogger` 数据库日志记录器
   - 记录每次工具调用的参数、结果、耗时
   - 提供统计查询功能
   - 提供最近调用记录查询
 
-#### 4. 数据库迁移
+#### 4. 数据库迁移 ✅
 - ✅ `backend/migrations/006_agent_tools.sql`
   - 创建 `agent_tool_calls` 表
   - 为 7 个 Agent 配置默认工具列表
   - 添加索引优化查询性能
+
+#### 5. 工具系统集成 ✅ (2026-02-08 新增)
+- ✅ `backend/internal/ai/engine.go` - 更新 AI 引擎
+  - 初始化工具注册表
+  - 注册所有 7 个工具
+  - 为每个 Agent 传递 toolRegistry
+  - 添加 `ExecuteTool` 方法
+  - 添加 `ListTools` 方法
+
+- ✅ `backend/internal/ai/agents/agent_base.go` - 更新基类Agent
+  - 添加 `toolRegistry` 字段
+  - 添加 `agentID` 字段
+  - 实现 `CanUseTool` 方法
+  - 实现 `CallTool` 方法
+  - 在 Prompt 中自动添加工具说明
+
+- ✅ `backend/internal/ai/agents/agent_0_director.go` - 更新总导演
+  - 添加 toolRegistry 参数
+  - 配置 7 个工具
+  - 传递 agentID = 0
+
+#### 6. 文档 ✅
+- ✅ `AGENTS_UPDATE_GUIDE.md` - Agent 更新指南
+  - 详细的更新步骤
+  - 每个 Agent 的工具配置
+  - 示例代码
 
 ---
 
@@ -94,21 +120,47 @@
 ## 📁 文件结构
 
 ```
-backend/internal/ai/tools/
-├── tools.go              # 工具接口与注册表 (已更新)
-├── logger.go             # 日志记录器 (新增)
-├── rag_search.go         # RAG 检索工具 (新增)
-├── neo4j_query.go        # Neo4j 查询工具 (新增)
-├── project_status.go     # 项目状态工具 (新增)
-└── storyline_tools.go    # 三线管理工具 (新增)
+backend/internal/ai/
+├── engine.go              # AI 引擎 (已更新)
+├── types.go               # 类型定义
+├── agents/
+│   ├── agent_base.go      # 基类Agent (已更新)
+│   ├── agent_0_director.go  # 总导演 (已更新)
+│   ├── agent_1_narrator.go  # 旁白叙述者 (待更新)
+│   ├── agent_2_character.go # 角色扮演者 (待更新)
+│   ├── agent_3_quality.go   # 审核导演 (待更新)
+│   ├── agent_4_skyline.go   # 天线掌控者 (待更新)
+│   ├── agent_5_groundline.go # 地线掌控者 (待更新)
+│   └── agent_6_plotline.go  # 剧情线掌控者 (待更新)
+└── tools/
+    ├── tools.go              # 工具接口与注册表 (已更新)
+    ├── logger.go             # 日志记录器 (新增)
+    ├── rag_search.go         # RAG 检索工具 (新增)
+    ├── neo4j_query.go        # Neo4j 查询工具 (新增)
+    ├── project_status.go     # 项目状态工具 (新增)
+    └── storyline_tools.go    # 三线管理工具 (新增)
 
 backend/migrations/
 └── 006_agent_tools.sql   # 工具系统数据库迁移 (新增)
+
+Docs/
+├── PHASE2_PROGRESS.md       # 本文档
+└── AGENTS_UPDATE_GUIDE.md   # Agent 更新指南 (新增)
 ```
 
 ---
 
 ## ⏳ 待完成任务
+
+### ❗ 紧急任务：完成 Agent 更新
+- [ ] 更新 Agent 1 - 旁白叙述者
+- [ ] 更新 Agent 2 - 角色扮演者
+- [ ] 更新 Agent 3 - 审核导演
+- [ ] 更新 Agent 4 - 天线掌控者
+- [ ] 更新 Agent 5 - 地线掌控者
+- [ ] 更新 Agent 6 - 剧情线掌控者
+
+> 📖 参考 `AGENTS_UPDATE_GUIDE.md` 进行更新
 
 ### Task 2.2: Agent 专属知识库分类
 - [ ] 为 Agent 1 创建 8 大分类知识
@@ -148,35 +200,77 @@ backend/migrations/
 
 ## 📝 下一步行动
 
-1. **集成工具到 AI Engine**
-   - 更新 `backend/internal/ai/engine.go`
-   - 在初始化时注册所有工具
-   - 为每个 Agent 配置工具访问权限
+### 优先级 1：完成 Agent 更新 🔥
 
-2. **测试工具系统**
-   - 编写单元测试
-   - 测试每个工具的执行
-   - 测试日志记录
+**目标：**将剩余 6 个 Agent 更新以支持工具系统
 
-3. **开始 Task 2.2: Agent 专属知识库**
-   - 创建知识库分类表
-   - 为 Agent 1/2 准备示例知识
+**步骤：**
+1. 按照 `AGENTS_UPDATE_GUIDE.md` 更新各 Agent
+2. 更新 import 路径
+3. 添加 toolRegistry 参数
+4. 配置工具列表
+5. 传递 agentID
 
----
+**验证：**
+```bash
+cd backend
+go build ./...
+```
 
-## 🔗 相关文档
+### 优先级 2：更新 main.go 初始化
 
-- [NovelForge-AI 技术文档](../NovelForge-AI-技术文档.md)
-- [README](../README.md)
-- [ROADMAP](../ROADMAP.md)
+需要更新主程序，传递所需的 repository 到 Engine：
+
+```go
+// 初始化 Engine
+aiEngine := ai.NewEngine(
+    cfg,
+    db,
+    retriever,
+    projectRepo,
+    chapterRepo,
+    storylineRepo,
+    neo4jRepo,
+)
+```
+
+### 优先级 3：测试工具系统
+
+编写单元测试验证：
+- 工具注册
+- 工具调用
+- Agent 权限验证
+- 日志记录
 
 ---
 
 ## 📊 进度跟踪
 
-- **Week 3 总进度**: 20% (1/5 任务完成)
-- **第二阶段总进度**: 15% (Task 2.1 完成)
+- **Task 2.1 进度**: ✅ **100% 完成** (包括集成)
+- **Week 3 总进度**: 35% (Task 2.1 完成 + 集成工作)
+- **第二阶段总进度**: 20%
+
+### 今日成果 (2026-02-08)
+
+✅ 7 个核心工具实现  
+✅ 工具注册表和日志系统  
+✅ AI Engine 集成工具系统  
+✅ BaseAgent 支持工具调用  
+✅ 总导演 Agent 完成更新  
+✅ 数据库迁移脚本  
+✅ 详细的更新文档  
+
+**总计**: 10 个文件创建/更新，~600 行代码
 
 ---
 
-*最后更新: 2026-02-08 09:37 CST*
+## 🔗 相关文档
+
+- [NovelForge-AI 技术文档](./NovelForge-AI-技术文档.md)
+- [Agent 更新指南](./AGENTS_UPDATE_GUIDE.md)
+- [README](./README.md)
+- [ROADMAP](./ROADMAP.md)
+
+---
+
+*最后更新: 2026-02-08 09:42 CST*

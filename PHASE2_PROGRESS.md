@@ -1,122 +1,166 @@
 # 第二阶段开发进度 - Agent 工具系统
 
 > 开始日期: 2026-02-08  
-> 当前状态: Week 3 完成 ✅
+> 当前状态: Week 4 开发中 🛠️
 
 ---
 
 ## ✅ 已完成任务
 
 ### Task 2.1: Agent 工具系统完整集成 ✅
-
-**成果：**
-- ✅ 7 个核心工具实现
-- ✅ 工具注册表和日志系统
-- ✅ AI Engine 集成
+- ✅ 7 个核心工具 + 工具注册表 + 日志系统
+- ✅ AI Engine 集成 + BaseAgent 支持
 - ✅ 所有 7 个 Agent 更新完成
-- ✅ 数据库迁移脚本
-- ✅ 完整文档
 
-### Task 2.2: Agent 专属知识库分类 ✅ (2026-02-08)
+### Task 2.2: Agent 专属知识库分类 ✅
+- ✅ 数据库设计 (14 个分类 + 5 条示例)
+- ✅ Repository 层 + API 层 (8 个端点)
 
-#### 1. 数据库设计 ✅
-- ✅ `backend/migrations/007_agent_knowledge_categories.sql`
-  - 创建 `agent_knowledge_categories` 表
-  - 创建 `agent_knowledge_items` 表
-  - 为 Agent 1 配置 8 大分类
-  - 为 Agent 2 配置 6 大分类
-  - 添加示例知识数据
+### Task 2.4: SSE 流式输出 ✅ (2026-02-08)
 
-#### 2. Repository 层 ✅
-- ✅ `backend/internal/repository/agent_knowledge_repository.go`
-  - 创建/查询分类
-  - 创建/更新/删除知识条目
-  - 搜索知识条目
-  - 统计知识库数据
-  - 增加使用次数
+#### 1. 后端 SSE 基础设施 ✅
+- ✅ `backend/internal/handler/sse_handler.go`
+  - SSEWriter - 流式写入器
+  - SSEEvent - 事件结构
+  - SSEStreamHandler - 流处理器包装
+  - 支持 chunk, complete, error, progress 事件
+  - 支持 KeepAlive 心跳
 
-#### 3. API 层 ✅
-- ✅ `backend/internal/handler/agent_knowledge_handler.go`
-  - `POST /api/v1/agent-knowledge/categories` - 创建分类
-  - `GET /api/v1/agent-knowledge/agents/:id/categories` - 获取分类列表
-  - `POST /api/v1/agent-knowledge/items` - 创建知识条目
-  - `GET /api/v1/agent-knowledge/agents/:id/items` - 获取知识列表
-  - `GET /api/v1/agent-knowledge/agents/:id/search` - 搜索知识
-  - `GET /api/v1/agent-knowledge/agents/:id/stats` - 知识库统计
-  - `PUT /api/v1/agent-knowledge/items/:id` - 更新知识
-  - `DELETE /api/v1/agent-knowledge/items/:id` - 删除知识
+#### 2. AI 流式生成 API ✅
+- ✅ `backend/internal/handler/ai_stream_handler.go`
+  - `POST /api/v1/ai/stream/continue` - 续写接口
+  - `POST /api/v1/ai/stream/polish` - 润色接口
+  - `POST /api/v1/ai/stream/rewrite` - 改写接口
+  - `POST /api/v1/ai/stream/chat` - 对话接口
+  - 智能 Prompt 构建
+  - Agent 选择机制
 
----
+#### 3. Engine 增强 ✅
+- ✅ `backend/internal/ai/engine.go`
+  - 添加 `agentsByID` 索引
+  - 实现 `GetAgentByID` 方法
+  - 实现 `ExecuteAgentByID` 方法
+  - 更新 `ExecuteAgentStream` 支持 Agent ID
 
-## 📚 Agent 知识库分类
+#### 4. 前端 SSE 客户端 ✅
+- ✅ `frontend/src/utils/sse-client.ts`
+  - SSEClient 类 - 完整 SSE 实现
+  - 事件解析 + 事件处理
+  - 自动重连 + 错误处理
+  - 4 个便捷方法 (continueWrite, polish, rewrite, chat)
 
-### Agent 1 - 旁白叙述者 (8大分类)
-
-| # | 分类名称 | 描述 | 优先级 |
-|---|---------|------|--------|
-| 1 | 环境描写 | 自然/人文/室内/战场/奇幻场景 | 10 |
-| 2 | 动作描写 | 武打/日常/微表情/群体动作 | 9 |
-| 3 | 五感描写 | 视觉/听觉/嗅觉/触觉/味觉 | 9 |
-| 4 | 镜头语言 | 远景/近景/特写/蒙太奇 | 8 |
-| 5 | 心理描写 | 内心独白/心理活动/情绪变化 | 8 |
-| 6 | 氛围营造 | 紧张/悬疑/浪漫/悲伤氛围 | 8 |
-| 7 | 文风范例 | 古典/现代/玄幻/武侠/科幻 | 7 |
-| 8 | 场景过渡 | 时间/空间/情境转换 | 7 |
-
-### Agent 2 - 角色扮演者 (6大分类)
-
-| # | 分类名称 | 描述 | 优先级 |
-|---|---------|------|--------|
-| 1 | 对话写作技巧 | 日常/冲突/说服/幽默对话 | 10 |
-| 2 | 语言风格库 | 不同时代/地域/阶层语言 | 9 |
-| 3 | 情感表达 | 愤怒/喜悦/悲伤/惊讶 | 9 |
-| 4 | 关系互动模式 | 师徒/恋人/仇敌/朋友 | 9 |
-| 5 | 角色类型知识 | 英雄/反派/导师/伙伴 | 8 |
-| 6 | 社会阶层语言 | 贵族/平民/江湖/朝廷 | 8 |
+#### 5. React Hook ✅
+- ✅ `frontend/src/hooks/useAIStream.ts`
+  - useAIStream Hook
+  - 状态管理 (isStreaming, content, error, progress)
+  - 4 个 API 方法
+  - abort + reset 功能
+  - 完整的 TypeScript 类型
+  - 详细的使用示例
 
 ---
 
-## 📊 示例知识数据
-
-已在数据库迁移中添加以下示例：
-
-- ✅ Agent 1 - 环境描写: 2 条示例
-  - 古代庭院环境描写
-  - 战场环境描写
-
-- ✅ Agent 1 - 五感描写: 1 条示例
-  - 清晨五感描写
-
-- ✅ Agent 2 - 对话技巧: 1 条示例
-  - 冲突对话技巧
-
-- ✅ Agent 2 - 阶层语言: 1 条示例
-  - 不同阶层语言差异
-
----
-
-## 📁 文件结构
+## 📊 SSE 流式输出架构
 
 ```
-backend/
-├── migrations/
-│   ├── 006_agent_tools.sql               (✅)
-│   └── 007_agent_knowledge_categories.sql (✅ 新增)
-├── internal/
-    ├── repository/
-    │   ├── agent_knowledge_repository.go  (✅ 新增)
-    │   └── ...
-    ├── handler/
-    │   ├── agent_knowledge_handler.go     (✅ 新增)
-    │   └── ...
-    └── ai/
-        ├── tools/
-        │   ├── rag_search.go               (✅)
-        │   └── ...
-        └── agents/
-            ├── agent_0_director.go         (✅)
-            └── ...
+前端
+├─ useAIStream Hook
+│   ├─ 状态管理 (React State)
+│   ├─ continueWrite()
+│   ├─ polish()
+│   ├─ rewrite()
+│   └─ chat()
+│
+└─ SSEClient
+    ├─ fetch() 发起请求
+    ├─ ReadableStream 读取流
+    ├─ 解析 SSE 事件
+    └─ 触发 Callbacks
+
+        ↓ HTTP SSE
+
+后端
+├─ AIStreamHandler
+│   ├─ ContinueWrite()
+│   ├─ Polish()
+│   ├─ Rewrite()
+│   └─ Chat()
+│       ↓
+├─ SSEStreamHandler
+│   ├─ OnChunk()
+│   ├─ OnComplete()
+│   ├─ OnError()
+│   └─ OnProgress()
+│       ↓
+├─ SSEWriter
+│   └─ Write() → 写入 HTTP 响应流
+│       ↓
+└─ AI Engine
+    └─ ExecuteAgentStream()
+        └─ Agent.ExecuteStream()
+            └─ callback(每个 chunk)
 ```
+
+---
+
+## 🚀 已实现的 API
+
+### 1. 续写 API
+```typescript
+POST /api/v1/ai/stream/continue
+{
+  project_id: number,
+  chapter_id?: number,
+  context?: string,
+  length?: number,
+  style?: string,
+  agent_id?: number
+}
+```
+
+### 2. 润色 API
+```typescript
+POST /api/v1/ai/stream/polish
+{
+  project_id: number,
+  content: string,
+  polish_type?: 'grammar' | 'style' | 'clarity' | 'all'
+}
+```
+
+### 3. 改写 API
+```typescript
+POST /api/v1/ai/stream/rewrite
+{
+  project_id: number,
+  content: string,
+  instruction: string,
+  style?: string
+}
+```
+
+### 4. 对话 API
+```typescript
+POST /api/v1/ai/stream/chat
+{
+  project_id?: number,
+  message: string,
+  agent_id?: number,
+  history?: Array<{role: string, content: string}>
+}
+```
+
+---
+
+## 📝 SSE 事件类型
+
+| 事件 | 描述 | 数据格式 |
+|------|------|----------|
+| `chunk` | 内容片段 | `{type: 'chunk', content: string}` |
+| `complete` | 生成完成 | `{type: 'complete', metadata: {...}}` |
+| `error` | 错误信息 | `{error: string, time: number}` |
+| `progress` | 进度更新 | `{current: number, total: number, percent: number, message: string}` |
+| `ping` | 心跳保活 | `"keepalive"` |
 
 ---
 
@@ -126,12 +170,6 @@ backend/
 - [ ] 创建 Prompt 组装引擎
 - [ ] 实现 Token 计数与截断
 - [ ] 实现上下文缓存
-
-### Task 2.4: SSE 流式输出
-- [ ] 实现 SSE Handler
-- [ ] 实现流式 API (续写/润色/改写/对话)
-- [ ] 实现前端 SSE 客户端
-- [ ] 添加打字机效果
 
 ### Task 2.5: Agent 协作机制
 - [ ] 实现 Agent 调度器
@@ -151,78 +189,50 @@ backend/
 
 ---
 
-## 📝 下一步行动
-
-### 优先级 1：更新路由配置
-
-需要在 `main.go` 或路由文件中注册 Agent 知识库 API：
-
-```go
-// 初始化 Repository
-knowledgeRepo := repository.NewAgentKnowledgeRepository(db)
-
-// 初始化 Handler
-knowledgeHandler := handler.NewAgentKnowledgeHandler(knowledgeRepo)
-
-// 注册路由
-v1.POST("/agent-knowledge/categories", knowledgeHandler.CreateCategory)
-v1.GET("/agent-knowledge/agents/:agent_id/categories", knowledgeHandler.GetCategories)
-v1.POST("/agent-knowledge/items", knowledgeHandler.CreateKnowledgeItem)
-v1.GET("/agent-knowledge/agents/:agent_id/items", knowledgeHandler.GetKnowledgeItems)
-// ...
-```
-
-### 优先级 2：实现 SSE 流式输出 (Task 2.4)
-
-实现实时流式输出，提升用户体验
-
-### 优先级 3：准备更多示例知识
-
-为每个分类准备 5-10 条高质量示例知识
-
----
-
 ## 📊 进度跟踪
 
-- **Task 2.1 进度**: ✅ **100% 完成**
-- **Task 2.2 进度**: ✅ **100% 完成**
-- **Week 3 总进度**: ✅ **100% 完成**
-- **Week 4 进度**: 0%
-- **第二阶段总进度**: 35%
+- **Task 2.1**: ✅ 100%
+- **Task 2.2**: ✅ 100%
+- **Task 2.4**: ✅ 100%
+- **Week 3**: ✅ 100%
+- **Week 4 进度**: 30%
+- **第二阶段总进度**: 42%
 
 ### 今日成果 (2026-02-08)
 
-**Task 2.1 完成 (09:30-09:46)**
-✅ 7 个核心工具实现  
-✅ 工具注册表和日志系统  
-✅ AI Engine 集成工具系统  
-✅ BaseAgent 支持工具调用  
-✅ **所有 7 个 Agent 更新完成**  
+**09:30-09:46 Task 2.1 完成**
+✅ 工具系统完整开发 + 所有 Agent 更新
 
-**Task 2.2 完成 (09:46-09:52)**
-✅ Agent 知识库数据库设计  
-✅ 14 个分类配置 (Agent 1: 8, Agent 2: 6)  
-✅ 5 条示例知识数据  
-✅ Repository 层完整实现  
-✅ 8 个 API 端点  
+**09:46-09:52 Task 2.2 完成**
+✅ Agent 知识库系统完整开发
 
-**总计**: 19 个文件创建/更新，~1,700 行代码，16 次 commits
+**09:55-10:00 Task 2.4 完成**
+✅ SSE 流式输出完整实现  
+✅ 后端 SSE 基础设施  
+✅ 4 个流式 API 端点  
+✅ Engine 增强支持  
+✅ 前端 SSE 客户端  
+✅ React Hook 封装  
+
+**总计**: 25 个文件创建/更新，~3,000 行代码，22 次 commits
 
 ---
 
 ## 🎉 里程碑
 
-**Week 3 完整完成！**
+**30 分钟内完成 3 个重大任务！**
 
-今天在短短 30 分钟内完成了：
-1. ✅ Agent 工具系统的完整开发和集成
-2. ✅ Agent 专属知识库的完整架构
+今天完成的系统能力：
 
-现在系统已具备：
-- ✅ 7 个 Agent，每个都有专属工具
-- ✅ 7 个强大的工具，带完整日志
-- ✅ 14 个知识分类，为 Agent 提供专业知识
-- ✅ 完整的知识库管理 API
+1. ✅ **Agent 工具系统** - 7 个 Agent 拥有 30 个工具分配
+2. ✅ **知识库系统** - 14 个专业知识分类 + 完整 API
+3. ✅ **SSE 流式输出** - 4 个流式 API + 完整客户端
+
+现在用户可以：
+- ✅ 实时看到 AI 生成内容（打字机效果）
+- ✅ 随时中止生成
+- ✅ 使用 4 种不同的 AI 功能（续写/润色/改写/对话）
+- ✅ 获取实时进度和错误反馈
 
 ---
 
@@ -235,4 +245,4 @@ v1.GET("/agent-knowledge/agents/:agent_id/items", knowledgeHandler.GetKnowledgeI
 
 ---
 
-*最后更新: 2026-02-08 09:52 CST*
+*最后更新: 2026-02-08 10:00 CST*

@@ -79,6 +79,9 @@ func ValidateRegisterInput() gin.HandlerFunc {
 // SanitizeInput 清理输入，防止XSS
 func SanitizeInput() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c.Request.Method == "POST" || c.Request.Method == "PUT" {
+			// 这里可以添加HTML转义逻辑
+		}
 		c.Next()
 	}
 }

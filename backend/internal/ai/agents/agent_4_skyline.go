@@ -1,7 +1,8 @@
 package agents
 
 import (
-	"github.com/zibianqu/novel-study/internal/ai"
+	"novel-study/backend/internal/ai"
+	"novel-study/backend/internal/ai/tools"
 )
 
 // SkylineAgent Agent 4: 天线掌控者
@@ -10,49 +11,42 @@ type SkylineAgent struct {
 }
 
 // NewSkylineAgent 创建天线掌控者Agent
-func NewSkylineAgent(apiKey string) *SkylineAgent {
+func NewSkylineAgent(apiKey string, toolRegistry *tools.ToolRegistry) *SkylineAgent {
 	config := &ai.AgentConfig{
 		AgentKey: "agent_4_skyline",
 		Name:     "天线掌控者 (Skyline Controller)",
-		SystemPrompt: `你是 NovelForge AI 的天线掌控者，负责掌控"天线"——世界命运的宏观走向。
+		SystemPrompt: `你是 NovelForge AI 的天线掌控者，负责小说中的“天线”（大势、世界大事件）的规划和推进。
 
-你的管理内容：
+天线包括：
+1. 🌍 世界大势 - 国家、势力、战争
+2. 🏛️ 重大事件 - 影响全局的事件
+3. 🕰️ 时代背景 - 历史进程
+4. ⚖️ 势力关系 - 各方势力的消长
+5. 🌊 危机与机遇 - 大环境变化
 
-1. 🌍 **世界大势**
-   - 时代背景（和平/战乱/变革）
-   - 重大事件（天灾/战争/政变）
-   - 天道命运（修仙世界的大道规则）
-   - 规则变化（世界规则的演变）
+你的职责：
+- 规划天线的发展轨迹
+- 推演世界大事件
+- 确保天线与地线、剧情线协调
+- 为主角的成长创造机会和挑战
 
-2. 🏰 **势力格局**
-   - 兴衰曲线（各大势力的盛衰）
-   - 联盟对抗（势力间的合作与冲突）
-   - 关键NPC（影响大局的重要人物）
-   - 资源流动（权力、财富、信息）
-
-3. ⏰ **天线时间轴**
-   - 宏观事件链
-   - 对主角的倒逼
-
-**Neo4j 图谱关系**：
-- (:WorldEvent)-[:CAUSES]->(:WorldEvent)
-- (:Force)-[:ALLIANCE]->(:Force)
-- (:Force)-[:CONFLICT]->(:Force)
-- (:WorldEvent)-[:IMPACTS]->(:Character)
-- (:WorldEvent)-[:CHANGES]->(:WorldRule)
-
-**工作原则**：
-- 站在世界视角看问题
-- 天线事件必须对地线产生影响
-- 不是单纯的背景板，要主动推动剧情
-- 给主角制造压力和机遇`,
+工作原则：
+- 站在全局视角
+- 不过度干预主角的选择
+- 保持天线的连贯性和合理性`,
 		Model:       "gpt-4o",
-		Temperature: 0.7,
+		Temperature: 0.6,
 		MaxTokens:   4096,
-		Tools:       []string{"query_neo4j", "rag_search", "get_world_events"},
+		Tools: []string{
+			"rag_search",
+			"query_neo4j",
+			"get_storyline_status",
+			"update_storyline",
+			"create_storyline",
+		},
 	}
 
 	return &SkylineAgent{
-		BaseAgent: NewBaseAgent(config, apiKey),
+		BaseAgent: NewBaseAgent(config, apiKey, toolRegistry, 4),
 	}
 }

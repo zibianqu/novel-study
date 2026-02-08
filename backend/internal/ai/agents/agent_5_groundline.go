@@ -1,7 +1,8 @@
 package agents
 
 import (
-	"github.com/zibianqu/novel-study/internal/ai"
+	"novel-study/backend/internal/ai"
+	"novel-study/backend/internal/ai/tools"
 )
 
 // GroundlineAgent Agent 5: 地线掌控者
@@ -10,49 +11,43 @@ type GroundlineAgent struct {
 }
 
 // NewGroundlineAgent 创建地线掌控者Agent
-func NewGroundlineAgent(apiKey string) *GroundlineAgent {
+func NewGroundlineAgent(apiKey string, toolRegistry *tools.ToolRegistry) *GroundlineAgent {
 	config := &ai.AgentConfig{
 		AgentKey: "agent_5_groundline",
 		Name:     "地线掌控者 (Groundline Controller)",
-		SystemPrompt: `你是 NovelForge AI 的地线掌控者，负责掌控"地线"——主角的成长路径。
+		SystemPrompt: `你是 NovelForge AI 的地线掌控者，负责小说中的“地线”（主角个人成长路径）的规划和推进。
 
-你的管理内容：
+地线包括：
+1. 🎯 主角目标 - 短期、中期、长期目标
+2. 💪 能力成长 - 实力、技能、境界
+3. 🧠 心智成熟 - 思想、价值观、格局
+4. 👥 人脉关系 - 师徒、朋友、敌人
+5. 🏆 里程碑 - 关键成长节点
 
-1. 🌱 **主角成长弧**
-   - 性格成长（天真→成熟、弱小→强大）
-   - 能力进阶（修为、武功、智慧）
-   - 关系变化（亲情、爱情、友情、仇恨）
-   - 信念演变（价值观、世界观）
-   - 拉择时刻（重大选择点）
+你的职责：
+- 规划主角的成长路线
+- 设计成长节点和考验
+- 确保成长合理性（避免过快或过慢）
+- 平衡外部机遇与内在努力
+- 协调地线与天线、剧情线
 
-2. 🎯 **主角处境**
-   - 当前困境（面临的危机）
-   - 所有资源（实力、财富、人脉）
-   - 已知与未知（信息差）
-   - 情感状态（内心冲突）
-
-3. 👥 **配角路线**
-   - 师徒、情侣、好友的成长
-   - 配角与主角的关系演变
-
-**Neo4j 图谱关系**：
-- (:Character)-[:GROWS_TO {trigger}]->(:CharacterState)
-- (:Character)-[:LEARNS]->(:Ability)
-- (:Character)-[:RELATIONSHIP_CHANGE]->(:Character)
-- (:Character)-[:DECIDES]->(:Choice)-[:LEADS_TO]->(:Consequence)
-
-**工作原则**：
-- 主角成长必须有合理的触发事件
-- 每次成长都要付出代价
-- 地线要响应天线的倒逼
-- 地线要驱动剧情线的展开`,
+工作原则：
+- 尊重主角的选择和意愿
+- 给予挑战，但不超出能力范围
+- 成长曲线应符合人性`,
 		Model:       "gpt-4o",
-		Temperature: 0.7,
+		Temperature: 0.6,
 		MaxTokens:   4096,
-		Tools:       []string{"query_neo4j", "rag_search", "get_character_growth"},
+		Tools: []string{
+			"rag_search",
+			"query_neo4j",
+			"get_storyline_status",
+			"update_storyline",
+			"create_storyline",
+		},
 	}
 
 	return &GroundlineAgent{
-		BaseAgent: NewBaseAgent(config, apiKey),
+		BaseAgent: NewBaseAgent(config, apiKey, toolRegistry, 5),
 	}
 }

@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"bytes"
+	"html"
+	"io"
 	"net/http"
 	"regexp"
 
@@ -8,8 +11,10 @@ import (
 )
 
 var (
-	emailRegex    = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
-	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-]{3,20}$`)
+	emailRegex    = regexp.MustCompile(`^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$`)
+	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_\\-]{3,20}$`)
+	htmlTagRegex  = regexp.MustCompile(`<[^>]*>`)
+	scriptRegex   = regexp.MustCompile(`(?i)<script[^>]*>[\\s\\S]*?</script>`)
 )
 
 // ValidateRegisterInput 验证注册输入
@@ -79,9 +84,64 @@ func ValidateRegisterInput() gin.HandlerFunc {
 // SanitizeInput 清理输入，防止XSS
 func SanitizeInput() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.Request.Method == "POST" || c.Request.Method == "PUT" {
-			// 这里可以添加HTML转义逻辑
+		// 只处理POST和PUT请求
+		if c.Request.Method != "POST" && c.Request.Method != "PUT" {
+			c.Next()
+			return
 		}
+
+		// 只处理JSON请求
+		contentType := c.GetHeader("Content-Type")
+		if contentType != "application/json" && contentType != "application/json; charset=utf-8" {
+			c.Next()
+			return
+		}
+
+		// 读取请求体
+		body, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.Next()
+			return
+		}
+		c.Request.Body.Close()
+
+		// 清理危险内容
+		cleanedBody := sanitizeBytes(body)
+
+		// 重新设置请求体
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(cleanedBody))
+		c.Request.ContentLength = int64(len(cleanedBody))
+
 		c.Next()
 	}
+}
+
+// sanitizeBytes 清理字节数据
+func sanitizeBytes(data []byte) []byte {
+	str := string(data)
+	
+	// 1. 移除<script>标签
+	str = scriptRegex.ReplaceAllString(str, "")
+	
+	// 2. HTML转义特殊字符
+	str = html.EscapeString(str)
+	
+	// 3. 移除其他HTML标签
+	str = htmlTagRegex.ReplaceAllString(str, "")
+	
+	return []byte(str)
+}
+
+// SanitizeString 清理字符串（公开API）
+func SanitizeString(input string) string {
+	// 1. 移除<script>标签
+	input = scriptRegex.ReplaceAllString(input, "")
+	
+	// 2. HTML转义
+	input = html.EscapeString(input)
+	
+	// 3. 移除其他HTML标签
+	input = htmlTagRegex.ReplaceAllString(input, "")
+	
+	return input
 }

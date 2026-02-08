@@ -1,0 +1,65 @@
+# NovelForge AI - Go 代码检查配置
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck      # 检查错误处理
+    - gosimple      # 简化代码
+    - govet         # Go vet 检查
+    - ineffassign   # 检查无效赋值
+    - staticcheck   # 静态分析
+    - unused        # 检查未使用代码
+    - gofmt         # 格式化检查
+    - goimports     # import 检查
+    - misspell      # 拼写检查
+    - gocritic      # Go 代码审查
+    - gosec         # 安全检查
+    - bodyclose     # HTTP响应体关闭检查
+    - sqlclosecheck # SQL关闭检查
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  
+  govet:
+    check-shadowing: true
+  
+  gofmt:
+    simplify: true
+  
+  gosec:
+    excludes:
+      - G104  # 未检查的错误
+      - G204  # 子进程执行
+  
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+      - style
+
+issues:
+  exclude-rules:
+    # 排除测试文件中的某些检查
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+    
+    # 排除生成的代码
+    - path: .*\.pb\.go
+      linters:
+        - all
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

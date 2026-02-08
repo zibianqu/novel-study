@@ -16,160 +16,142 @@
 - ✅ 数据库设计 (14 个分类 + 5 条示例)
 - ✅ Repository 层 + API 层 (8 个端点)
 
-### Task 2.4: SSE 流式输出 ✅ (2026-02-08)
+### Task 2.3: Agent Prompt 动态组装 ✅ (2026-02-08)
 
-#### 1. 后端 SSE 基础设施 ✅
-- ✅ `backend/internal/handler/sse_handler.go`
-  - SSEWriter - 流式写入器
-  - SSEEvent - 事件结构
-  - SSEStreamHandler - 流处理器包装
-  - 支持 chunk, complete, error, progress 事件
-  - 支持 KeepAlive 心跳
+#### 1. Prompt 构建引擎 ✅
+- ✅ `backend/internal/ai/prompt/prompt_builder.go`
+  - PromptBuilder 核心类
+  - Section 片段管理
+  - Token 计数器接口
+  - SimpleTokenCounter 实现
+  - 按优先级选择片段
+  - 智能内容截断
+  - 10+ 种上下文添加方法
 
-#### 2. AI 流式生成 API ✅
-- ✅ `backend/internal/handler/ai_stream_handler.go`
-  - `POST /api/v1/ai/stream/continue` - 续写接口
-  - `POST /api/v1/ai/stream/polish` - 润色接口
-  - `POST /api/v1/ai/stream/rewrite` - 改写接口
-  - `POST /api/v1/ai/stream/chat` - 对话接口
-  - 智能 Prompt 构建
-  - Agent 选择机制
+#### 2. Prompt 缓存管理 ✅
+- ✅ `backend/internal/ai/prompt/prompt_cache.go`
+  - PromptCache 通用缓存
+  - ContextCache 上下文缓存管理器
+  - TTL 自动过期
+  - LRU 淘汰策略
+  - 命中率统计
+  - 3 层缓存：项目/角色/知识
 
-#### 3. Engine 增强 ✅
-- ✅ `backend/internal/ai/engine.go`
-  - 添加 `agentsByID` 索引
-  - 实现 `GetAgentByID` 方法
-  - 实现 `ExecuteAgentByID` 方法
-  - 更新 `ExecuteAgentStream` 支持 Agent ID
+#### 3. Prompt 服务层 ✅
+- ✅ `backend/internal/ai/prompt/prompt_service.go`
+  - PromptService 统一入口
+  - BuildAgentPrompt - 通用构建
+  - BuildContinueWritePrompt - 续写专用
+  - BuildPolishPrompt - 润色专用
+  - 缓存统计接口
+  - 多种 Option 结构
 
-#### 4. 前端 SSE 客户端 ✅
-- ✅ `frontend/src/utils/sse-client.ts`
-  - SSEClient 类 - 完整 SSE 实现
-  - 事件解析 + 事件处理
-  - 自动重连 + 错误处理
-  - 4 个便捷方法 (continueWrite, polish, rewrite, chat)
+#### 4. 使用文档 ✅
+- ✅ `backend/internal/ai/prompt/examples.md`
+  - 4 个完整示例
+  - 优先级指南
+  - Token 计数规则
+  - 缓存配置
+  - 最佳实践
+  - 故障排查
 
-#### 5. React Hook ✅
-- ✅ `frontend/src/hooks/useAIStream.ts`
-  - useAIStream Hook
-  - 状态管理 (isStreaming, content, error, progress)
-  - 4 个 API 方法
-  - abort + reset 功能
-  - 完整的 TypeScript 类型
-  - 详细的使用示例
+### Task 2.4: SSE 流式输出 ✅
+- ✅ 后端 SSE 基础设施 + 4 个流式 API
+- ✅ Engine 增强 + 前端 SSE 客户端
+- ✅ React Hook 封装
 
 ---
 
-## 📊 SSE 流式输出架构
+## 📊 Prompt 系统架构
 
 ```
-前端
-├─ useAIStream Hook
-│   ├─ 状态管理 (React State)
-│   ├─ continueWrite()
-│   ├─ polish()
-│   ├─ rewrite()
-│   └─ chat()
+Prompt 系统
+├─ PromptBuilder (构建引擎)
+│   ├─ Section 管理
+│   ├─ Token 计数
+│   ├─ 优先级排序
+│   ├─ 智能截断
+│   └─ 动态组装
 │
-└─ SSEClient
-    ├─ fetch() 发起请求
-    ├─ ReadableStream 读取流
-    ├─ 解析 SSE 事件
-    └─ 触发 Callbacks
-
-        ↓ HTTP SSE
-
-后端
-├─ AIStreamHandler
-│   ├─ ContinueWrite()
-│   ├─ Polish()
-│   ├─ Rewrite()
-│   └─ Chat()
-│       ↓
-├─ SSEStreamHandler
-│   ├─ OnChunk()
-│   ├─ OnComplete()
-│   ├─ OnError()
-│   └─ OnProgress()
-│       ↓
-├─ SSEWriter
-│   └─ Write() → 写入 HTTP 响应流
-│       ↓
-└─ AI Engine
-    └─ ExecuteAgentStream()
-        └─ Agent.ExecuteStream()
-            └─ callback(每个 chunk)
+├─ PromptCache (缓存系统)
+│   ├─ 项目缓存 (TTL: 30min)
+│   ├─ 角色缓存 (TTL: 1h)
+│   ├─ 知识缓存 (TTL: 2h)
+│   └─ LRU 淘汰
+│
+└─ PromptService (服务层)
+    ├─ BuildAgentPrompt
+    ├─ BuildContinueWritePrompt
+    ├─ BuildPolishPrompt
+    └─ 缓存管理
 ```
 
 ---
 
-## 🚀 已实现的 API
+## 🚀 Prompt 系统特性
 
-### 1. 续写 API
-```typescript
-POST /api/v1/ai/stream/continue
-{
-  project_id: number,
-  chapter_id?: number,
-  context?: string,
-  length?: number,
-  style?: string,
-  agent_id?: number
-}
-```
+### 1. 智能组装
+- ✅ **按优先级选择**: 自动选择最重要的内容
+- ✅ **Token 计数**: 实时计算，确保不超限
+- ✅ **智能截断**: 低优先级内容自动压缩
+- ✅ **动态调整**: 根据剩余 Token 调整内容
 
-### 2. 润色 API
-```typescript
-POST /api/v1/ai/stream/polish
-{
-  project_id: number,
-  content: string,
-  polish_type?: 'grammar' | 'style' | 'clarity' | 'all'
-}
-```
+### 2. 多层缓存
+- ✅ **项目缓存**: 100条，TTL 30分钟
+- ✅ **角色缓存**: 200条，TTL 1小时
+- ✅ **知识缓存**: 500条，TTL 2小时
+- ✅ **自动清理**: 定时清理过期条目
+- ✅ **命中统计**: 实时监控缓存效果
 
-### 3. 改写 API
-```typescript
-POST /api/v1/ai/stream/rewrite
-{
-  project_id: number,
-  content: string,
-  instruction: string,
-  style?: string
-}
-```
-
-### 4. 对话 API
-```typescript
-POST /api/v1/ai/stream/chat
-{
-  project_id?: number,
-  message: string,
-  agent_id?: number,
-  history?: Array<{role: string, content: string}>
-}
-```
+### 3. 丰富的上下文类型
+| 类型 | 方法 | 优先级 |
+|------|------|--------|
+| 项目上下文 | AddProjectContext | 8 |
+| 章节上下文 | AddChapterContext | 7 |
+| 最近内容 | AddRecentContent | 9 |
+| 知识库 | AddKnowledgeBase | 6 |
+| 三线信息 | AddStorylineContext | 7 |
+| 角色信息 | AddCharacterInfo | 6 |
+| 写作指引 | AddWritingGuidelines | 8 |
+| 元数据 | AddMetadata | 1 |
 
 ---
 
-## 📝 SSE 事件类型
+## 📝 使用示例
 
-| 事件 | 描述 | 数据格式 |
-|------|------|----------|
-| `chunk` | 内容片段 | `{type: 'chunk', content: string}` |
-| `complete` | 生成完成 | `{type: 'complete', metadata: {...}}` |
-| `error` | 错误信息 | `{error: string, time: number}` |
-| `progress` | 进度更新 | `{current: number, total: number, percent: number, message: string}` |
-| `ping` | 心跳保活 | `"keepalive"` |
+### 简单使用
+```go
+service := prompt.NewPromptService(4096)
+
+promptText, _ := service.BuildContinueWritePrompt(
+    ctx,
+    "You are a professional writer...",
+    &prompt.ContinueWriteOptions{
+        ProjectID: 1,
+        Context:   "前文...",
+        Length:    500,
+        Style:     "古典仙侠",
+    },
+)
+```
+
+### 完整上下文
+```go
+builder := prompt.NewPromptBuilder(8192)
+
+builder.SetSystemPrompt("系统 Prompt")
+builder.AddProjectContext(ctx, 1, projectInfo)
+builder.AddChapterContext(chapterInfo)
+builder.AddRecentContent(content, 2000)
+builder.AddKnowledgeBase(items, "环境描写")
+builder.SetUserPrompt("用户请求")
+
+finalPrompt := builder.Build()
+```
 
 ---
 
 ## ⏳ 待完成任务
-
-### Task 2.3: Agent Prompt 动态组装
-- [ ] 创建 Prompt 组装引擎
-- [ ] 实现 Token 计数与截断
-- [ ] 实现上下文缓存
 
 ### Task 2.5: Agent 协作机制
 - [ ] 实现 Agent 调度器
@@ -193,46 +175,49 @@ POST /api/v1/ai/stream/chat
 
 - **Task 2.1**: ✅ 100%
 - **Task 2.2**: ✅ 100%
+- **Task 2.3**: ✅ 100%
 - **Task 2.4**: ✅ 100%
 - **Week 3**: ✅ 100%
-- **Week 4 进度**: 30%
-- **第二阶段总进度**: 42%
+- **Week 4 进度**: 50%
+- **第二阶段总进度**: 50%
 
 ### 今日成果 (2026-02-08)
 
 **09:30-09:46 Task 2.1 完成**
-✅ 工具系统完整开发 + 所有 Agent 更新
+✅ 工具系统完整开发
 
 **09:46-09:52 Task 2.2 完成**
-✅ Agent 知识库系统完整开发
+✅ Agent 知识库系统
 
 **09:55-10:00 Task 2.4 完成**
-✅ SSE 流式输出完整实现  
-✅ 后端 SSE 基础设施  
-✅ 4 个流式 API 端点  
-✅ Engine 增强支持  
-✅ 前端 SSE 客户端  
-✅ React Hook 封装  
+✅ SSE 流式输出
 
-**总计**: 25 个文件创建/更新，~3,000 行代码，22 次 commits
+**10:01-10:05 Task 2.3 完成**
+✅ Prompt 动态组装引擎  
+✅ Prompt 缓存管理  
+✅ Prompt 服务层  
+✅ 完整使用文档  
+
+**总计**: 29 个文件，~4,200 行代码，27 次 commits
 
 ---
 
 ## 🎉 里程碑
 
-**30 分钟内完成 3 个重大任务！**
+**🎆 第二阶段已完成 50%！**
 
-今天完成的系统能力：
+今天在35分钟内完成了 4 个重大任务：
 
 1. ✅ **Agent 工具系统** - 7 个 Agent 拥有 30 个工具分配
 2. ✅ **知识库系统** - 14 个专业知识分类 + 完整 API
 3. ✅ **SSE 流式输出** - 4 个流式 API + 完整客户端
+4. ✅ **Prompt 组装系统** - 智能组装 + 多层缓存
 
-现在用户可以：
-- ✅ 实时看到 AI 生成内容（打字机效果）
-- ✅ 随时中止生成
-- ✅ 使用 4 种不同的 AI 功能（续写/润色/改写/对话）
-- ✅ 获取实时进度和错误反馈
+现在系统能力：
+- ✅ Agent 可以访问工具和知识库
+- ✅ 智能组装上下文，不超过 Token 限制
+- ✅ 多层缓存，提高响应速度
+- ✅ 实时流式输出，打字机效果
 
 ---
 
@@ -240,9 +225,10 @@ POST /api/v1/ai/stream/chat
 
 - [NovelForge-AI 技术文档](./NovelForge-AI-技术文档.md)
 - [Agent 更新指南](./AGENTS_UPDATE_GUIDE.md)
+- [Prompt 系统使用示例](./backend/internal/ai/prompt/examples.md)
 - [README](./README.md)
 - [ROADMAP](./ROADMAP.md)
 
 ---
 
-*最后更新: 2026-02-08 10:00 CST*
+*最后更新: 2026-02-08 10:05 CST*

@@ -8,43 +8,62 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/zibianqu/novel-study/internal/config"
+	"github.com/zibianqu/novel-study/internal/middleware"
 	"github.com/zibianqu/novel-study/internal/model"
+	"github.com/zibianqu/novel-study/internal/util"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthHandler struct {
-	db     *sql.DB
-	config *config.Config
+	db           *sql.DB
+	config       *config.Config
+	loginLimiter *middleware.LoginLimiter
 }
 
-func NewAuthHandler(db *sql.DB, cfg *config.Config) *AuthHandler {
-	return &AuthHandler{db: db, config: cfg}
+func NewAuthHandler(db *sql.DB, cfg *config.Config, limiter *middleware.LoginLimiter) *AuthHandler {
+	return &AuthHandler{
+		db:           db,
+		config:       cfg,
+		loginLimiter: limiter,
+	}
 }
 
 // Register 注册新用户
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req model.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		middleware.RespondError(c, http.StatusBadRequest, "INVALID_JSON", "请求参数格式错误")
 		return
 	}
 
 	// 验证输入
 	if req.Username == "" || req.Email == "" || req.Password == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名、邮箱和密码不能为空"})
+		middleware.RespondError(c, http.StatusBadRequest, "MISSING_FIELDS", "用户名、邮箱和密码不能为空")
 		return
 	}
 
-	// 密码长度验证
-	if len(req.Password) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "密码长度至少为6位"})
+	// 验证邮箱
+	if !util.ValidateEmail(req.Email) {
+		middleware.RespondError(c, http.StatusBadRequest, "INVALID_EMAIL", "邮箱格式不正确")
+		return
+	}
+
+	// 验证用户名
+	if !util.ValidateUsername(req.Username) {
+		middleware.RespondError(c, http.StatusBadRequest, "INVALID_USERNAME", "用户名必须是3-20位字母、数字、下划线或连字符")
+		return
+	}
+
+	// 验证密码强度
+	if valid, msg := util.ValidatePassword(req.Password); !valid {
+		middleware.RespondError(c, http.StatusBadRequest, "PASSWORD_WEAK", msg)
 		return
 	}
 
 	// 加密密码
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		middleware.RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "服务器错误")
 		return
 	}
 
@@ -54,15 +73,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	          VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id`
 	err = h.db.QueryRow(query, req.Username, req.Email, string(hashedPassword)).Scan(&userID)
 	if err != nil {
-		// 不暴露具体错误信息
-		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名或邮箱已存在"})
+		middleware.RespondError(c, http.StatusBadRequest, "USER_EXISTS", "用户名或邮箱已存在")
 		return
 	}
 
 	// 生成 Token
 	token, expiresAt, err := h.generateToken(userID, req.Username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		middleware.RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "服务器错误")
 		return
 	}
 
@@ -81,7 +99,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req model.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
+		middleware.RespondError(c, http.StatusBadRequest, "INVALID_JSON", "请求参数错误")
 		return
 	}
 
@@ -98,27 +116,33 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		query = `SELECT id, username, email, password_hash FROM users WHERE username = $1`
 		queryParam = req.Username
 	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供用户名或邮箱"})
+		middleware.RespondError(c, http.StatusBadRequest, "MISSING_IDENTIFIER", "请提供用户名或邮箱")
 		return
 	}
 
 	err := h.db.QueryRow(query, queryParam).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash)
 	if err != nil {
-		// 不暴露是用户不存在还是密码错误
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		// 记录失败
+		h.loginLimiter.RecordFailure(queryParam)
+		middleware.RespondError(c, http.StatusUnauthorized, "AUTH_FAILED", "用户名或密码错误")
 		return
 	}
 
 	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		// 记录失败
+		h.loginLimiter.RecordFailure(queryParam)
+		middleware.RespondError(c, http.StatusUnauthorized, "AUTH_FAILED", "用户名或密码错误")
 		return
 	}
+
+	// 记录成功
+	h.loginLimiter.RecordSuccess(queryParam)
 
 	// 生成 Token
 	token, expiresAt, err := h.generateToken(user.ID, user.Username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		middleware.RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "服务器错误")
 		return
 	}
 
@@ -139,13 +163,13 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	username := c.GetString("username")
 
 	if userID == 0 || username == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		middleware.RespondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "未认证")
 		return
 	}
 
 	token, expiresAt, err := h.generateToken(userID, username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		middleware.RespondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "服务器错误")
 		return
 	}
 

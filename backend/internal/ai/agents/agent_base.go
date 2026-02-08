@@ -8,20 +8,25 @@ import (
 	"math"
 	"time"
 
-	"github.com/zibianqu/novel-study/internal/ai"
+	"novel-study/backend/internal/ai"
+	"novel-study/backend/internal/ai/tools"
 )
 
 // BaseAgent 基础Agent实现
 type BaseAgent struct {
-	config *ai.AgentConfig
-	apiKey string
+	config       *ai.AgentConfig
+	apiKey       string
+	toolRegistry *tools.ToolRegistry
+	agentID      int // 用于工具调用日志
 }
 
 // NewBaseAgent 创建基础Agent
-func NewBaseAgent(config *ai.AgentConfig, apiKey string) *BaseAgent {
+func NewBaseAgent(config *ai.AgentConfig, apiKey string, toolRegistry *tools.ToolRegistry, agentID int) *BaseAgent {
 	return &BaseAgent{
-		config: config,
-		apiKey: apiKey,
+		config:       config,
+		apiKey:       apiKey,
+		toolRegistry: toolRegistry,
+		agentID:      agentID,
 	}
 }
 
@@ -38,6 +43,30 @@ func (a *BaseAgent) GetName() string {
 // GetDescription 获取Agent描述
 func (a *BaseAgent) GetDescription() string {
 	return a.config.Description
+}
+
+// CanUseTool 检查是否可以使用指定工具
+func (a *BaseAgent) CanUseTool(toolName string) bool {
+	for _, t := range a.config.Tools {
+		if t == toolName {
+			return true
+		}
+	}
+	return false
+}
+
+// CallTool 调用工具
+func (a *BaseAgent) CallTool(ctx context.Context, toolName string, params map[string]interface{}) (interface{}, error) {
+	if !a.CanUseTool(toolName) {
+		return nil, fmt.Errorf("agent %s is not authorized to use tool: %s", a.config.Name, toolName)
+	}
+
+	if a.toolRegistry == nil {
+		return nil, fmt.Errorf("tool registry not initialized")
+	}
+
+	log.Printf("[%s] 调用工具: %s", a.config.Name, toolName)
+	return a.toolRegistry.Execute(ctx, a.agentID, toolName, params)
 }
 
 // Execute 执行Agent
@@ -62,6 +91,12 @@ func (a *BaseAgent) Execute(ctx context.Context, req *ai.AgentRequest) (*ai.Agen
 		messages[1].Content += contextMsg
 	}
 
+	// 添加工具信息
+	if a.toolRegistry != nil && len(a.config.Tools) > 0 {
+		toolsInfo := a.buildToolsInfo()
+		messages[0].Content += toolsInfo
+	}
+
 	log.Printf("[%s] Executing request: %s", a.config.Name, req.Prompt)
 
 	// ✨ 调用 OpenAI API (带重试)
@@ -78,6 +113,27 @@ func (a *BaseAgent) Execute(ctx context.Context, req *ai.AgentRequest) (*ai.Agen
 		DurationMs: duration,
 		Metadata:   make(map[string]interface{}),
 	}, nil
+}
+
+// buildToolsInfo 构建工具信息
+func (a *BaseAgent) buildToolsInfo() string {
+	if len(a.config.Tools) == 0 {
+		return ""
+	}
+
+	var toolsDesc string
+	toolsDesc = "\n\n你可以使用以下工具：\n"
+
+	for _, toolName := range a.config.Tools {
+		tool, err := a.toolRegistry.Get(toolName)
+		if err == nil {
+			toolsDesc += fmt.Sprintf("- %s: %s\n", toolName, tool.GetDescription())
+		}
+	}
+
+	toolsDesc += "\n如果需要使用工具，请在响应中明确说明需要调用的工具和参数。"
+
+	return toolsDesc
 }
 
 // ExecuteStream 流式执行
@@ -97,6 +153,12 @@ func (a *BaseAgent) ExecuteStream(ctx context.Context, req *ai.AgentRequest, cal
 		contextJSON, _ := json.Marshal(req.Context)
 		contextMsg := fmt.Sprintf("\n\n上下文信息: %s", string(contextJSON))
 		messages[1].Content += contextMsg
+	}
+
+	// 添加工具信息
+	if a.toolRegistry != nil && len(a.config.Tools) > 0 {
+		toolsInfo := a.buildToolsInfo()
+		messages[0].Content += toolsInfo
 	}
 
 	log.Printf("[%s] Executing stream request: %s", a.config.Name, req.Prompt)
@@ -123,7 +185,7 @@ func (a *BaseAgent) callOpenAIWithRetry(ctx context.Context, messages []ai.ChatM
 			// 指数退避: 1s, 2s, 4s
 			waitTime := time.Duration(math.Pow(2, float64(i))) * time.Second
 			log.Printf("[%s] Retrying in %v...", a.config.Name, waitTime)
-			
+
 			select {
 			case <-time.After(waitTime):
 				// 继续重试

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -31,6 +32,11 @@ func main() {
 		log.Fatalf("数据库连接失败: %v", err)
 	}
 	defer db.Close()
+	
+	// 配置连接池
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
 	log.Println("✅ PostgreSQL 连接成功")
 
 	// 初始化 Neo4j 连接
@@ -40,6 +46,19 @@ func main() {
 	}
 	defer neo4jDriver.Close(context.Background())
 	log.Println("✅ Neo4j 连接成功")
+
+	// 初始化 Redis (可选)
+	// 如果需要Redis缓存，请取消下面注释
+	/*
+	redisClient, err := repository.NewRedisClient(cfg)
+	if err != nil {
+		log.Printf("警告: Redis 连接失败: %v", err)
+		redisClient = nil
+	} else {
+		defer redisClient.Close()
+		log.Println("✅ Redis 连接成功")
+	}
+	*/
 
 	// 初始化 AI 引擎
 	aiEngine := ai.NewEngine(cfg)
@@ -64,9 +83,20 @@ func main() {
 	aiService := service.NewAIService(aiEngine, agentRepo, projectRepo)
 	knowledgeService := service.NewKnowledgeService(knowledgeRepo, projectRepo, retriever)
 	graphService := service.NewGraphService(neo4jRepo, projectRepo)
+	
+	// 初始化 Cache Service (可选)
+	/*
+	var cacheService *service.CacheService
+	if redisClient != nil {
+		cacheService = service.NewCacheService(redisClient)
+	}
+	*/
+
+	// 初始化登录限流器 (5次尝试/1小时)
+	loginLimiter := middleware.NewLoginLimiter(5, 1*time.Hour)
 
 	// 初始化 Handler
-	authHandler := handler.NewAuthHandler(db, cfg)
+	authHandler := handler.NewAuthHandler(db, cfg, loginLimiter)
 	projectHandler := handler.NewProjectHandler(projectService)
 	chapterHandler := handler.NewChapterHandler(chapterService)
 	aiHandler := handler.NewAIHandler(aiService)
@@ -79,12 +109,15 @@ func main() {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	router := gin.Default()
+	router := gin.New() // 使用New()而不是Default()
 
-	// ✨ 全局中间件 - P1 修复
-	router.Use(middleware.CORS())              // CORS
-	router.Use(middleware.TimeoutByPath())     // 超时控制
-	router.Use(middleware.RateLimitByPath())   // 限流
+	// ✨ 全局中间件
+	router.Use(middleware.RequestLogger())    // 请求日志
+	router.Use(middleware.Recovery())         // 恢复中间件
+	router.Use(middleware.ErrorHandler())     // 错误处理
+	router.Use(middleware.CORS())             // CORS
+	router.Use(middleware.TimeoutByPath())    // 超时控制
+	router.Use(middleware.RateLimitByPath())  // 限流
 
 	// 静态文件服务
 	router.Static("/css", "./frontend/css")
@@ -109,8 +142,10 @@ func main() {
 		// 公开接口
 		auth := api.Group("/auth")
 		{
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/login", authHandler.Login)
+			// 注册接口使用输入验证
+			auth.POST("/register", middleware.ValidateRegisterInput(), authHandler.Register)
+			// 登录接口使用限流保护
+			auth.POST("/login", loginLimiter.LimitLogin(), authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
 		}
 
@@ -168,7 +203,8 @@ func main() {
 	log.Printf("🎬 7 个核心 Agent 已就绪")
 	log.Printf("🧠 RAG 知识库系统已启用")
 	log.Printf("🕸️ Neo4j 知识图谱已连接")
-	log.Printf("✅ CORS / 超时 / 限流 已启用")
+	log.Printf("✅ 安全增强: 输入验证 + 登录限流 + 错误处理")
+	log.Printf("✅ 中间件: CORS + 超时 + 限流 + 日志")
 	log.Printf("🔗 前端: http://localhost:%s", port)
 	log.Printf("📚 API: http://localhost:%s/api/v1", port)
 	log.Printf("❤️ Health: http://localhost:%s/api/v1/health", port)

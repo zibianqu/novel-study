@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 
@@ -19,24 +20,33 @@ import (
 func main() {
 	// 加载环境变量
 	if err := godotenv.Load(); err != nil {
-		log.Println("警告: 未找到 .env 文件，使用系统环境变量")
+		log.Println("⚠️  警告: 未找到 .env 文件，使用系统环境变量")
 	}
 
 	// 加载配置
 	cfg := config.Load()
 
-	// 初始化数据库连接
+	// 验证配置
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("❗ 配置验证失败: %v", err)
+	}
+
+	// 初始化数据库连接（使用优化版本）
 	db, err := repository.NewPostgresDB(cfg)
 	if err != nil {
-		log.Fatalf("数据库连接失败: %v", err)
+		log.Fatalf("❗ 数据库连接失败: %v", err)
 	}
 	defer db.Close()
-	log.Println("✅ PostgreSQL 连接成功")
+	log.Println("✅ PostgreSQL 连接成功（连接池已优化）")
+
+	// 输出连接池统计
+	stats := repository.GetDBStats(db)
+	log.Printf("📊 数据库连接池: MaxOpen=%d, MaxIdle=%d", stats.MaxOpenConnections, cfg.DBMaxIdleConnections)
 
 	// 初始化 Neo4j 连接
 	neo4jDriver, err := repository.NewNeo4jDriver(cfg)
 	if err != nil {
-		log.Fatalf("Neo4j 连接失败: %v", err)
+		log.Fatalf("❗ Neo4j 连接失败: %v", err)
 	}
 	defer neo4jDriver.Close(context.Background())
 	log.Println("✅ Neo4j 连接成功")
@@ -79,9 +89,14 @@ func main() {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	router := gin.Default()
+	
+	// 使用 gin.New() 而不是 Default()，手动添加中间件
+	router := gin.New()
 
-	// ✨ 全局中间件 - P1 修复
+	// ===== 全局中间件 =====
+	router.Use(middleware.ErrorHandler())      // 错误处理
+	router.Use(middleware.RequestLogger())     // 请求日志
+	router.Use(gin.Recovery())                 // Panic恢复
 	router.Use(middleware.CORS())              // CORS
 	router.Use(middleware.TimeoutByPath())     // 超时控制
 	router.Use(middleware.RateLimitByPath())   // 限流
@@ -109,14 +124,36 @@ func main() {
 		// 公开接口
 		auth := api.Group("/auth")
 		{
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/login", authHandler.Login)
-			auth.POST("/refresh", authHandler.RefreshToken)
+			// 创建输入验证器
+			validator := middleware.NewInputValidator()
+			
+			// 创建登录限流器
+			loginLimiter := middleware.NewLoginLimiter()
+
+			// 注册（带验证）
+			auth.POST("/register", 
+				validator.ValidateRegisterInput(),
+				authHandler.Register,
+			)
+
+			// 登录（带验证和限流）
+			auth.POST("/login",
+				validator.ValidateLoginInput(),
+				loginLimiter.CheckLimit(),
+				authHandler.Login,
+			)
+
+			// 刷新Token
+			auth.POST("/refresh", 
+				middleware.JWTAuth(cfg.JWTSecret),
+				authHandler.RefreshToken,
+			)
 		}
 
 		// 需要认证的接口
 		protected := api.Group("")
 		protected.Use(middleware.JWTAuth(cfg.JWTSecret))
+		protected.Use(middleware.APILogger()) // API详细日志
 		{
 			// 项目管理
 			protected.GET("/projects", projectHandler.GetProjects)
@@ -162,20 +199,33 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Println("")
-	log.Println("✨ ========================================")
-	log.Printf("🚀 NovelForge AI 服务器启动成功")
-	log.Printf("🎬 7 个核心 Agent 已就绪")
-	log.Printf("🧠 RAG 知识库系统已启用")
-	log.Printf("🕸️ Neo4j 知识图谱已连接")
-	log.Printf("✅ CORS / 超时 / 限流 已启用")
-	log.Printf("🔗 前端: http://localhost:%s", port)
-	log.Printf("📚 API: http://localhost:%s/api/v1", port)
-	log.Printf("❤️ Health: http://localhost:%s/api/v1/health", port)
-	log.Println("✨ ========================================")
-	log.Println("")
+	
+	printBanner(port, cfg)
 
 	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("服务器启动失败: %v", err)
+		log.Fatalf("❗ 服务器启动失败: %v", err)
 	}
+}
+
+// printBanner 打印启动信息
+func printBanner(port string, cfg *config.Config) {
+	fmt.Println("")
+	fmt.Println("✨ ========================================")
+	fmt.Println("🚀 NovelForge AI 服务器启动成功")
+	fmt.Println("✨ ========================================")
+	fmt.Println("")
+	fmt.Println("🎬  7 个核心 Agent 已就绪")
+	fmt.Println("🧠  RAG 知识库系统已启用")
+	fmt.Println("🕸️  Neo4j 知识图谱已连接")
+	fmt.Println("✅  安全增强: 密码验证 + 登录限流")
+	fmt.Println("✅  性能优化: 数据库索引 + 连接池")
+	fmt.Println("✅  中间件: CORS / 超时 / 限流 / 日志")
+	fmt.Println("")
+	fmt.Printf("🔗 前端: http://localhost:%s\n", port)
+	fmt.Printf("📚 API: http://localhost:%s/api/v1\n", port)
+	fmt.Printf("❤️  Health: http://localhost:%s/api/v1/health\n", port)
+	fmt.Println("")
+	fmt.Printf("🌐 环境: %s\n", cfg.Environment)
+	fmt.Println("✨ ========================================")
+	fmt.Println("")
 }
